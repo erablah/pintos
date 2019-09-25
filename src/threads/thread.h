@@ -122,7 +122,6 @@ void thread_block (void);
 void thread_unblock (struct thread *);
 
 void thread_sleep (int64_t);
-bool comp_func (const struct list_elem *, const struct list_elem *, void *);
 void thread_wake (int64_t);
 
 struct thread *thread_current (void);

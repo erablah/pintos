@@ -73,6 +73,8 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+bool comp_1 (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool comp_2 (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -204,6 +206,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  thread_yield ();
 
   return tid;
 }
@@ -247,7 +250,7 @@ thread_unblock (struct thread *t)
 }
 
 bool
-comp_func (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+comp_1 (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
   struct thread *first = list_entry(a, struct thread, elem);
   struct thread *second = list_entry(b, struct thread, elem);
@@ -259,6 +262,20 @@ comp_func (const struct list_elem *a, const struct list_elem *b, void *aux UNUSE
   return first->priority > second->priority;
 }
 
+bool
+comp_2 (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+  struct thread *first = list_entry(a, struct thread, elem);
+  struct thread *second = list_entry(b, struct thread, elem);
+
+  if (first->priority == second->priority)
+  {
+    return first->end > second->end;
+  }
+  return first->priority < second->priority;
+}
+
+
 void
 thread_sleep (int64_t end)
 {
@@ -269,7 +286,7 @@ thread_sleep (int64_t end)
 
   old_level = intr_disable ();
   t->end = end;
-  list_insert_ordered (&sleep_list, &t->elem, &comp_func, NULL);
+  list_insert_ordered (&sleep_list, &t->elem, &comp_1, NULL);
   thread_block ();
   intr_set_level (old_level);
 }
@@ -292,6 +309,7 @@ thread_wake (int64_t ticks)
     {
       list_remove (&t->elem);
       thread_unblock (t);
+      thread_yield();
     }
     else break;
   }
@@ -391,7 +409,15 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
+  struct thread *ready_max;
+
   thread_current ()->priority = new_priority;
+  ready_max = list_entry (list_max(&ready_list, &comp_2, NULL), struct thread, elem);
+
+  if (new_priority < ready_max->priority)
+  {
+      thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -546,11 +572,15 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void)
 {
+  struct thread *next;
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    next = list_entry(list_max (&ready_list, &comp_2, NULL), struct thread, elem);
+    list_remove (&next->elem);
+    return next;
 }
+
 
 /* Completes a thread switch by activating the new thread's page
    tables, and, if the previous thread is dying, destroying it.
