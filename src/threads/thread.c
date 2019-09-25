@@ -73,8 +73,25 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-bool comp_1 (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-bool comp_2 (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool comp1 (const struct list_elem *a, const struct list_elem *b, void *aux);
+
+bool
+comp1 (const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+  struct thread *first = list_entry(a, struct thread, elem);
+  struct thread *second = list_entry(b, struct thread, elem);
+  int i = (*((int*)aux));
+
+  if (i == 0)
+  {
+    if (first->priority == second->priority)
+    {
+      return first->end < second->end;
+    }
+    return first->priority > second->priority;
+  }
+  return first->priority < second->priority;
+}
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -249,44 +266,18 @@ thread_unblock (struct thread *t)
   intr_set_level (old_level);
 }
 
-bool
-comp_1 (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
-{
-  struct thread *first = list_entry(a, struct thread, elem);
-  struct thread *second = list_entry(b, struct thread, elem);
-
-  if (first->priority == second->priority)
-  {
-    return first->end < second->end;
-  }
-  return first->priority > second->priority;
-}
-
-bool
-comp_2 (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
-{
-  struct thread *first = list_entry(a, struct thread, elem);
-  struct thread *second = list_entry(b, struct thread, elem);
-
-  if (first->priority == second->priority)
-  {
-    return first->end > second->end;
-  }
-  return first->priority < second->priority;
-}
-
-
 void
 thread_sleep (int64_t end)
 {
   enum intr_level old_level;
   struct thread *t = thread_current();
+  int aux = 0;
 
   ASSERT (t->status == THREAD_RUNNING);
 
   old_level = intr_disable ();
   t->end = end;
-  list_insert_ordered (&sleep_list, &t->elem, &comp_1, NULL);
+  list_insert_ordered (&sleep_list, &t->elem, &comp1, &aux);
   thread_block ();
   intr_set_level (old_level);
 }
@@ -309,7 +300,7 @@ thread_wake (int64_t ticks)
     {
       list_remove (&t->elem);
       thread_unblock (t);
-      thread_yield();
+      intr_yield_on_return();
     }
     else break;
   }
@@ -412,7 +403,8 @@ thread_set_priority (int new_priority)
   struct thread *ready_max;
 
   thread_current ()->priority = new_priority;
-  ready_max = list_entry (list_max(&ready_list, &comp_2, NULL), struct thread, elem);
+  int aux = 1;
+  ready_max = list_entry (list_max(&ready_list, &comp1, &aux), struct thread, elem);
 
   if (new_priority < ready_max->priority)
   {
@@ -576,9 +568,12 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    next = list_entry(list_max (&ready_list, &comp_2, NULL), struct thread, elem);
+  {
+    int aux = 1;
+    next = list_entry(list_max (&ready_list, &comp1, &aux), struct thread, elem);
     list_remove (&next->elem);
     return next;
+  }
 }
 
 
