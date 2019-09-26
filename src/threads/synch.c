@@ -151,8 +151,8 @@ sema_up (struct semaphore *sema)
     thread_unblock (to_unblock);
   }
   sema->value++;
-  intr_set_level (old_level);
   thread_yield ();
+  intr_set_level (old_level);
 }
 
 static void sema_test_helper (void *sema_);
@@ -231,8 +231,26 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+  struct thread *holder = lock->holder;
+  struct thread *waiter = thread_current ();
+
+
+  if ((holder != NULL) && (holder->priority < waiter->priority))
+  {
+    //int temp = holder->priority;
+    holder->original_priority = holder->priority;
+    holder->priority = waiter->priority;
+    sema_down (&lock->semaphore);
+    lock->holder = thread_current ();
+    //holder->priority = temp;
+    //thread_yield();
+  }
+  else
+  {
+    sema_down (&lock->semaphore);
+    lock->holder = thread_current ();
+  }
+
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -266,7 +284,13 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  struct thread *cur = thread_current ();
+
+
+
+
   lock->holder = NULL;
+  cur->priority = cur->original_priority;
   sema_up (&lock->semaphore);
 }
 
