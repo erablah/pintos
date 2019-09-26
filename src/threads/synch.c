@@ -50,6 +50,8 @@ comp (const struct list_elem *a, const struct list_elem *b, void *is_thread_list
   {
     first = list_entry(a, struct thread, elem);
     second = list_entry(b, struct thread, elem);
+    msg ("first: %d", first);
+    msg ("second: %d", second);
   }
   else
   {
@@ -102,6 +104,7 @@ sema_down (struct semaphore *sema)
       thread_block ();
     }
   sema->value--;
+  msg ("waiters emp %d", list_empty(&sema->waiters));
   intr_set_level (old_level);
 }
 
@@ -234,23 +237,27 @@ lock_acquire (struct lock *lock)
   struct thread *holder = lock->holder;
   struct thread *waiter = thread_current ();
 
-
   if ((holder != NULL) && (holder->priority < waiter->priority))
   {
-    //int temp = holder->priority;
     holder->original_priority = holder->priority;
     holder->priority = waiter->priority;
-    sema_down (&lock->semaphore);
-    lock->holder = thread_current ();
-    //holder->priority = temp;
-    //thread_yield();
-  }
-  else
-  {
-    sema_down (&lock->semaphore);
-    lock->holder = thread_current ();
+    waiter->donated_to = holder;
+    while (holder->donated_to != NULL)
+    {
+      holder = holder->donated_to;
+      holder->priority = waiter->priority;
+    }
   }
 
+  sema_down (&lock->semaphore);
+  lock->holder = thread_current ();
+  msg ("wef %d", list_empty(&lock->semaphore.waiters));
+  list_push_back(&thread_current ()->lock_list, &lock->elem);
+  msg ("wegw %d",list_empty (&list_entry (list_back(&thread_current ()->lock_list), struct lock, elem)->semaphore.waiters));
+  if (list_next (list_back(&thread_current ()->lock_list)) == list_end(&thread_current ()->lock_list))
+  {
+    msg ("god bless");
+  }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -281,16 +288,48 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock)
 {
+  msg ("wegw1 %d",list_empty (&list_entry (list_back(&thread_current ()->lock_list), struct lock, elem)->semaphore.waiters));
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
+  msg ("wegw1 %d",list_empty (&list_entry (list_back(&thread_current ()->lock_list), struct lock, elem)->semaphore.waiters));
   struct thread *cur = thread_current ();
+  struct list *lock_list1 = &cur->lock_list;
 
+  bool aux = 0;
+  int max = PRI_MIN;
+  int temp;
+  msg ("%d", cur->priority);
+  struct list_elem *e;
 
+  if (list_next (list_begin(&thread_current ()->lock_list)) == list_end(&thread_current ()->lock_list))
+  {
+    msg ("god bless1");
+  }
 
+  //for (e = list_begin (&cur->lock_list); e != list_end(&cur->lock_list); )
+  for (e = list_begin (lock_list1); e != list_end(lock_list1); )
+  {
+    msg ("running");
+    msg ("wegw2 %d", list_empty (&list_entry (e, struct lock, elem)->semaphore.waiters));
+    //temp = list_entry (list_max (&list_entry (e, struct lock, elem)->semaphore.waiters, &comp, &aux), struct thread, elem)->priority;
+    if(max < temp)
+    {
+      max = temp;
+    }
+    msg ("wegw3 %d", list_empty (&list_entry (e, struct lock, elem)->semaphore.waiters));
+    e = list_next (e);
+    msg ("wegw4 %d", list_empty (&list_entry (e, struct lock, elem)->semaphore.waiters));
+  }
 
+  if (max < cur->original_priority)
+  {
+    cur->priority = cur->original_priority;
+  }
+  else
+  {
+    cur->priority = max;
+  }
   lock->holder = NULL;
-  cur->priority = cur->original_priority;
   sema_up (&lock->semaphore);
 }
 
@@ -370,7 +409,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
 
   if (!list_empty (&cond->waiters))
   {
-    bool aux = 0;
+    bool aux = 1;
     struct semaphore_elem *to_up = list_entry (list_max (&cond->waiters, &comp, &aux), struct semaphore_elem, elem);
     list_remove (&to_up->elem);
     sema_up (&to_up->semaphore);
