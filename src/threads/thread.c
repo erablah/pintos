@@ -373,7 +373,9 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread)
+  {
     list_push_back (&ready_list, &cur->elem);
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -537,7 +539,6 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-  //original_priority intialization
   t->original_priority = priority;
   t->magic = THREAD_MAGIC;
   list_init (&t->lock_list);

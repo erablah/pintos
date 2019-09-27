@@ -231,17 +231,15 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  enum intr_level old_level;
   struct thread *holder = lock->holder;
   struct thread *waiter = thread_current ();
+  enum intr_level old_level;
+  old_level = intr_disable();
 
-  old_level = intr_disable ();
   if (holder != NULL && holder->priority < waiter->priority)
   {
     waiter->donated_to = holder;
-    msg ("1");
     holder->priority = waiter->priority;
-    msg ("2");
     while (holder->donated_to != NULL)
     {
       holder = holder->donated_to;
@@ -252,9 +250,9 @@ lock_acquire (struct lock *lock)
     }
   }
   sema_down (&lock->semaphore);
-  intr_set_level (old_level);
   lock->holder = thread_current ();
   list_push_back(&thread_current ()->lock_list, &lock->elem);
+  intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -290,7 +288,7 @@ lock_release (struct lock *lock)
   struct thread *cur = thread_current ();
   struct list *lock_list = &cur->lock_list;
 
-  bool aux = 0;
+  bool aux = 1;
   int max = PRI_MIN;
   int temp;
 
@@ -394,7 +392,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
 
   if (!list_empty (&cond->waiters))
   {
-    bool aux = 1;
+    bool aux = 0;
     struct semaphore_elem *to_up = list_entry (list_max (&cond->waiters, &comp, &aux), struct semaphore_elem, elem);
     list_remove (&to_up->elem);
     sema_up (&to_up->semaphore);
