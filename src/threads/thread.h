@@ -93,7 +93,7 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
     int64_t end;
     struct list lock_list;              /* List for locks that this thread holds */
-    struct thread *donated_to;           /* Thread that currently lent this priorty */
+    struct thread *donated_to;           /* Thread that currently lent this priority */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

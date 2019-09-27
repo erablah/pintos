@@ -403,6 +403,7 @@ thread_set_priority (int new_priority)
   struct thread *ready_max;
 
   thread_current ()->priority = new_priority;
+  //thread_current ()->original_priority = new_priority;
   int aux = 1;
   ready_max = list_entry (list_max(&ready_list, &comp1, &aux), struct thread, elem);
 
@@ -573,7 +574,7 @@ next_thread_to_run (void)
   else
   {
     int aux = 1;
-    next = list_entry(list_max (&ready_list, &comp1, &aux), struct thread, elem);
+    next = list_entry (list_max (&ready_list, &comp1, &aux), struct thread, elem);
     list_remove (&next->elem);
     return next;
   }
