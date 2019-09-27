@@ -233,8 +233,7 @@ lock_acquire (struct lock *lock)
 
   struct thread *holder = lock->holder;
   struct thread *waiter = thread_current ();
-  enum intr_level old_level;
-  old_level = intr_disable();
+  enum intr_level old_level;  
 
   if (holder != NULL && holder->priority < waiter->priority)
   {
@@ -252,7 +251,6 @@ lock_acquire (struct lock *lock)
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
   list_push_back(&thread_current ()->lock_list, &lock->elem);
-  intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false

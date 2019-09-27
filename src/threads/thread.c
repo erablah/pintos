@@ -404,13 +404,14 @@ thread_set_priority (int new_priority)
 {
   struct thread *ready_max;
 
-  thread_current ()->original_priority = new_priority;
-  if (thread_current ()->priority < new_priority)
+  if (thread_current ()->priority == thread_current ()->original_priority)
     thread_current ()->priority = new_priority;
+  thread_current ()->original_priority = new_priority;
+
   int aux = 1;
   ready_max = list_entry (list_max(&ready_list, &comp1, &aux), struct thread, elem);
 
-  if (new_priority < ready_max->priority)
+  if (thread_current ()->priority < ready_max->priority)
   {
       thread_yield();
   }
