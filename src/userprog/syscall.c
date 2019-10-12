@@ -3,7 +3,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "threads/syscall_util.h"
+#include "userprog/syscall_util.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -16,14 +16,13 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f)
 {
-  if (!valid(f->esp))
-    exit (-1);
+  validate (f->esp);
 
   switch (*(int*)f->esp)
   {
     case SYS_HALT:                   /* Halt the operating system. */
     {
-      f->eax = halt();
+      halt();
       break;
     }
 
@@ -31,7 +30,7 @@ syscall_handler (struct intr_frame *f)
     {
       int status = *((int*)f->esp + 1);
 
-      f->eax = exit (status);
+      exit (status);
       break;
     }
 
@@ -109,7 +108,7 @@ syscall_handler (struct intr_frame *f)
       int fd = *((int*)f->esp + 1);
       unsigned position = *((unsigned*)f->esp + 2);
 
-      f->eax = seek (fd, position);
+      seek (fd, position);
       break;
     }
 
@@ -125,7 +124,7 @@ syscall_handler (struct intr_frame *f)
     {
       int fd = *((int*)f->esp + 1);
 
-      f->eax = close (fd);
+      close (fd);
       break;
     }
 

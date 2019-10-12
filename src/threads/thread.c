@@ -119,6 +119,7 @@ thread_init (void)
   list_init (&sleep_list);
   list_init (&all_list);
 
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -557,6 +558,14 @@ init_thread (struct thread *t, const char *name, int priority)
   t->original_priority = priority;
   t->magic = THREAD_MAGIC;
   list_init (&t->lock_list);
+
+#ifdef USERPROG
+  list_init (&t->child_list);
+  sema_init (&t->wait_sema, 0);
+  sema_init (&t->exit_sema, 0);
+  t->exit_status = -1;
+  t->execfile = NULL;
+#endif
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

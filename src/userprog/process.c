@@ -91,11 +91,38 @@ start_process (void *cmdline_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t child_tid)
 {
-  while (1)
-    thread_yield ();
-  return -1;
+  struct thread *cur = thread_current();
+  struct list_elem e;
+  struct list child_list = cur->child_list;
+  struct thread *child = NULL;
+  int child_status;
+  enum old_level;
+
+
+  for (e = list_begin (&child_list); e != list_end (&child_list); e = list_next (e))
+  {
+    if (e->tid == child_tid)
+    {
+      /* interrupts need to be disabled because the process
+      could call wait on the same tids */
+      old_level = intr_disable ();
+      child = list_entry (e, struct thread, child_elem));
+      list_remove (e);
+      intr_set_level (old_level);
+    }
+  }
+  if (child == NULL)
+    return -1;
+
+  if (child->exit_status == -1)
+    return -1;
+
+  sema_down (&child->wait_sema);
+  child_status = child->exit_status;
+  sema_up (&child->exit_sema);
+  return child_status;
 }
 
 /* Free the current process's resources. */
@@ -104,6 +131,13 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  /* Send exit status to parent and begin termination */
+  cur->exit_status = status;
+  sema_up (&cur->wait_sema);
+  sema_down (&cur->exit_sema);
+  file_close (cur->execfile);
+  cur->execfile = NULL;
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -224,6 +258,7 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   // for argument passing
   char *file_name;
   char *save_ptr;
+  enum intr_level old_level;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -234,8 +269,12 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   /* Separate file_name and args for argument passing */
   file_name = strtok_r (cmdline, " ", &save_ptr);
 
-  /* Open executable file. */
+  /* Open executable file, and deny write to the executable */
+  old_level = intr_disable ();
   file = filesys_open (file_name);
+  file_deny_write (file);
+  intr_set_level (old_level);
+
   if (file == NULL)
     {
       printf ("load: %s: open failed\n", file_name);
@@ -321,11 +360,14 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
+  t->execfile = file;
   success = true;
 
  done:
-  /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  /* We arrive here whether the load is successful or not. If the load was
+  successful, keep file open so that writes are denied */
+  if (!success)
+    file_close (file);
   return success;
 }
 
