@@ -40,6 +40,8 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
+static bool allow_thread_yield;
+
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame
   {
@@ -111,6 +113,7 @@ thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
+  allow_thread_yield = 0;
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&sleep_list);
@@ -128,6 +131,7 @@ thread_init (void)
 void
 thread_start (void)
 {
+  allow_thread_yield = 1;
   /* Create the idle thread. */
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
@@ -223,8 +227,9 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  if (t->priority > thread_current()->priority)
+    thread_yield ();
   thread_yield ();
-
   return tid;
 }
 
@@ -371,6 +376,9 @@ thread_yield (void)
 
   ASSERT (!intr_context ());
 
+  if (!allow_thread_yield)
+    return;
+
   old_level = intr_disable ();
   if (cur != idle_thread)
   {
@@ -402,19 +410,24 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
-  struct thread *ready_max;
+  bool yield = 0;
 
   if (thread_current ()->priority == thread_current ()->original_priority)
     thread_current ()->priority = new_priority;
   thread_current ()->original_priority = new_priority;
 
   int aux = 1;
-  ready_max = list_entry (list_max(&ready_list, &comp1, &aux), struct thread, elem);
-
-  if (thread_current ()->priority < ready_max->priority)
+  if (!list_empty (&ready_list))
   {
-      thread_yield();
+    struct thread *ready_max = list_entry (list_max(&ready_list, &comp1, &aux), struct thread, elem);
+
+    if (thread_current ()->priority < ready_max->priority)
+    {
+        yield = 1;
+    }
   }
+  if (yield)
+    thread_yield ();
 }
 
 /* Returns the current thread's priority. */

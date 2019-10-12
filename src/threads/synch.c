@@ -151,8 +151,11 @@ sema_up (struct semaphore *sema)
     thread_unblock (to_unblock);
   }
   sema->value++;
-  thread_yield ();
   intr_set_level (old_level);
+  if (!intr_context ())
+    thread_yield ();
+  else
+    intr_yield_on_return ();
 }
 
 static void sema_test_helper (void *sema_);
@@ -233,7 +236,6 @@ lock_acquire (struct lock *lock)
 
   struct thread *holder = lock->holder;
   struct thread *waiter = thread_current ();
-  enum intr_level old_level;  
 
   if (holder != NULL && holder->priority < waiter->priority)
   {
