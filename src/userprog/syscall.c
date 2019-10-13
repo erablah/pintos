@@ -30,6 +30,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_EXIT:                   /* Terminate this process. */
     {
+      validate1 (f->esp);
+
       int status = *((int*)f->esp + 1);
 
       exit (status);
@@ -38,6 +40,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_EXEC:                   /* Start another process. */
     {
+      validate1 (f->esp);
+
       char *cmd_line = (char*)*((int*)f->esp + 1);
       validate (cmd_line);
 
@@ -49,6 +53,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_WAIT:                   /* Wait for a child process to die. */
     {
+      validate1 (f->esp);
+
       pid_t pid = *((pid_t*)f->esp + 1);
 
       f->eax = wait (pid);
@@ -57,6 +63,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_CREATE:                 /* Create a file. */
     {
+      validate2 (f->esp);
+
       char *file = (char*)*((int*)f->esp + 1);
       unsigned initial_size = *((unsigned*)f->esp + 2);
 
@@ -70,6 +78,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_REMOVE:                 /* Delete a file. */
     {
+      validate1 (f->esp);
+
       char *file = (char*)*((int*)f->esp + 1);
 
       validate (file);
@@ -82,6 +92,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_OPEN:                   /* Open a file. */
     {
+      validate1 (f->esp);
+
       char *file = (char*)*((int*)f->esp + 1);
 
       validate (file);
@@ -92,6 +104,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_FILESIZE:               /* Obtain a file's size. */
     {
+      validate1 (f->esp);
+
       int fd = *((int*)f->esp + 1);
 
       f->eax = filesize (fd);
@@ -100,6 +114,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_READ:                   /* Read from a file. */
     {
+      validate3 (f->esp);
+
       int fd = *((int*)f->esp + 1);
       void *buffer = (void*)*((int*)f->esp + 2);
       unsigned size = *((unsigned*)f->esp + 3);
@@ -112,6 +128,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_WRITE:                  /* Write to a file. */
     {
+      validate3 (f->esp);
+
       int fd = *((int*)f->esp + 1);
       void *buffer = (void*)*((int*)f->esp + 2);
       unsigned size = *((unsigned*)f->esp + 3);
@@ -124,6 +142,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_SEEK:                   /* Change position in a file. */
     {
+      validate2 (f->esp);
+
       int fd = *((int*)f->esp + 1);
       unsigned position = *((unsigned*)f->esp + 2);
 
@@ -133,6 +153,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_TELL:                   /* Report current position in a file. */
     {
+      validate1 (f->esp);
+
       int fd = *((int*)f->esp + 1);
 
       f->eax = tell (fd);
@@ -141,6 +163,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_CLOSE:                  /* Close a file. */
     {
+      validate1 (f->esp);
+
       int fd = *((int*)f->esp + 1);
 
       close (fd);

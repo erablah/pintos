@@ -68,9 +68,16 @@ int read (int fd, void *buffer, unsigned size)
   if (fd == 0)
   {
     input_getc ();
+    return size;
   }
 
+  if (fd == 1)
+    exit (-1);
+
   struct file *file_ptr = fd_to_file (fd);
+
+  if (file_ptr == NULL)
+    exit (-1);
   return file_read (file_ptr, buffer, size);
 }
 
@@ -79,9 +86,17 @@ int write (int fd, const void *buffer, unsigned size)
   if (fd == 1)
   {
     putbuf (buffer, size);
+    return (int)size;
   }
 
+  if (fd == 0)
+    exit (-1);
+
   struct file *file_ptr = fd_to_file (fd);
+
+  if (file_ptr == NULL)
+    exit (-1);
+
   return file_write (file_ptr, buffer, size);
 
 }
@@ -108,10 +123,51 @@ void
 validate (void *ptr)
 {
   struct thread *cur = thread_current ();
-  printf("hi\n");
-  if (!is_user_vaddr (ptr) || ptr == NULL
-        || pagedir_get_page (cur->pagedir , ptr) == NULL)
-    exit (1);
+  for (int i = 0; i < 4; i++)
+  {
+    if (!is_user_vaddr (ptr + i) || ptr + i == NULL
+          || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
+      exit (-1);
+  }
+}
+
+void
+validate1 (void *ptr)
+{
+  struct thread *cur = thread_current ();
+  for (int i = 4; i < 8; i++)
+  {
+    if (!is_user_vaddr (ptr + i) || ptr + i == NULL
+          || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
+      exit (-1);
+  }
+}
+
+void
+validate2 (void *ptr)
+{
+  validate1 (ptr);
+  struct thread *cur = thread_current ();
+  for (int i = 8; i < 12; i++)
+  {
+    if (!is_user_vaddr (ptr + i) || ptr + i == NULL
+          || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
+      exit (-1);
+  }
+}
+
+void
+validate3 (void *ptr)
+{
+  validate1 (ptr);
+  validate2 (ptr);
+  struct thread *cur = thread_current ();
+  for (int i = 12; i < 16; i++)
+  {
+    if (!is_user_vaddr (ptr + i) || ptr + i == NULL
+          || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
+      exit (-1);
+  }
 }
 
 struct file *

@@ -30,25 +30,32 @@ process_execute (const char *cmdline)
 {
   tid_t tid;
   char *fn_copy;
+  char *cmdline_copy;
   char *file_name;
   char *save_ptr;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  cmdline_copy = palloc_get_page (0);
+
+  if ((fn_copy == NULL) || (cmdline_copy == NULL))
     return TID_ERROR;
+
   strlcpy (fn_copy, cmdline, PGSIZE);
+  strlcpy (cmdline_copy, cmdline, PGSIZE);
 
   /* Extract file_name */
-  file_name = strtok_r (cmdline, " ", &save_ptr);
+  file_name = strtok_r (cmdline_copy, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
 
+  palloc_free_page (cmdline_copy);
+
   if (tid == TID_ERROR)
-    //remove child from child list (tid == child)
     palloc_free_page (fn_copy);
+
   return tid;
 }
 
@@ -68,8 +75,9 @@ start_process (void *cmdline_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (cmdline, &if_.eip, &if_.esp);
 
-  /* If load failed, quit. */
   palloc_free_page (cmdline);
+
+  /* If load failed, quit. */
   if (!success)
     thread_exit ();
 
@@ -141,10 +149,10 @@ process_exit (void)
   /* Close the executable file (& allow it to be written on) and
   free all fd's */
   file_close (cur->execfile);
-  for (e = list_begin (&cur->file_list); e != list_end (&cur->file_list);
-        e = list_remove (e))
+  for (e = list_begin (&cur->file_list); e != list_end (&cur->file_list); )
   {
     struct file *file = list_entry (e, struct file, elem);
+    e = list_next (e);
     file_close (file);
   }
 
@@ -280,15 +288,15 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   /* Separate file_name and args for argument passing */
   file_name = strtok_r (cmdline, " ", &save_ptr);
 
-  /* Open executable file, and deny write to the executable */
   file = filesys_open (file_name);
-  file_deny_write (file);
 
   if (file == NULL)
     {
       printf ("load: %s: open failed\n", file_name);
       goto done;
     }
+
+  file_deny_write (file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -556,7 +564,6 @@ setup_stack (void **esp, const char *filename, char *args)
       else
         palloc_free_page (kpage);
     }
-    hex_dump ((uintptr_t)*esp, *esp, sizeof(char)*80, true);
   return success;
 }
 

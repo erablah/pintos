@@ -19,5 +19,8 @@ unsigned tell (int);
 void close (int);
 
 void validate (void *);
+void validate1 (void *);
+void validate2 (void *);
+void validate3 (void *);
 
 #endif
