@@ -94,25 +94,28 @@ int
 process_wait (tid_t child_tid)
 {
   struct thread *cur = thread_current();
-  struct list_elem e;
+  struct list_elem *e;
   struct list child_list = cur->child_list;
   struct thread *child = NULL;
   int child_status;
-  enum old_level;
+  enum intr_level old_level;
 
 
   for (e = list_begin (&child_list); e != list_end (&child_list); e = list_next (e))
   {
-    if (e->tid == child_tid)
+    struct thread *t = list_entry (e, struct thread, elem);
+    if (t->tid == child_tid)
     {
       /* interrupts need to be disabled because the process
       could call wait on the same tids */
       old_level = intr_disable ();
-      child = list_entry (e, struct thread, child_elem));
+      child = t;
       list_remove (e);
       intr_set_level (old_level);
+      break;
     }
   }
+
   if (child == NULL)
     return -1;
 
@@ -132,12 +135,9 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
-  /* Send exit status to parent and begin termination */
-  cur->exit_status = status;
+  /* Let parent know this process is exiting and begin termination */
   sema_up (&cur->wait_sema);
   sema_down (&cur->exit_sema);
-  file_close (cur->execfile);
-  cur->execfile = NULL;
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

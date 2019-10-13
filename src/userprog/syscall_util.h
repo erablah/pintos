@@ -2,6 +2,7 @@
 #define USERPROG_SYSCALL_UTIL_H
 
 #include "threads/thread.h"
+#include "userprog/process.h"
 
 void halt (void);
 void exit (int);
