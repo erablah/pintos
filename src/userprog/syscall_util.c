@@ -1,3 +1,4 @@
+#include "userprog/syscall_util.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
@@ -5,9 +6,12 @@
 #include "devices/shutdown.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
-#include <console.c>
+#include <console.h>
 #include "devices/input.h"
 #include "userprog/process.h"
+#include <stdio.h>
+
+struct file * fd_to_file (int fd);
 
 void halt (void)
 {
@@ -17,27 +21,6 @@ void halt (void)
 void exit (int status)
 {
   struct thread *cur = thread_current ();
-  struct list_elem *e;
-  struct list lock_list = cur->lock_list;
-  struct list file_list = cur->file_list;
-
-  for (e = list_begin (&lock_list); e != list_end (&lock_list);
-        e = list_remove (e))
-  {
-    struct lock *lock = list_entry (e, struct lock, elem);
-    lock_release (lock);
-  }
-
-  /* Close the executable file (allow it to be written on) and
-  free all fd's */
-  file_close (cur->execfile);
-  for (e = list_begin (&file_list); e != list_end (&file_list);
-        e = list_remove (e))
-  {
-    struct file *file = list_entry (e, struct file, elem);
-    file_close (file);
-  }
-
   cur->exit_status = status;
   printf ("%s: exit(%d)\n", cur->name, status);
   thread_exit ();
@@ -65,7 +48,6 @@ bool remove (const char *file)
 
 int open (const char *file)
 {
-  struct thread *cur = thread_current ();
   struct file *file_ptr = filesys_open (file);
 
   if (file_ptr == NULL)
@@ -126,8 +108,9 @@ void
 validate (void *ptr)
 {
   struct thread *cur = thread_current ();
-
-  if (!is_user_vaddr (ptr) || ptr == NULL || pagedir_get_page (cur->pagedir , ptr) == NULL)
+  printf("hi\n");
+  if (!is_user_vaddr (ptr) || ptr == NULL
+        || pagedir_get_page (cur->pagedir , ptr) == NULL)
     exit (1);
 }
 

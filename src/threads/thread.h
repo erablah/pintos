@@ -103,8 +103,8 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct list_elem child_elem;
     struct list child_list;
+    struct list_elem child_elem;
     struct semaphore wait_sema;
     struct semaphore exit_sema;
     int exit_status;

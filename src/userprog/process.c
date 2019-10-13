@@ -45,7 +45,9 @@ process_execute (const char *cmdline)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+
   if (tid == TID_ERROR)
+    //remove child from child list (tid == child)
     palloc_free_page (fn_copy);
   return tid;
 }
@@ -95,15 +97,13 @@ process_wait (tid_t child_tid)
 {
   struct thread *cur = thread_current();
   struct list_elem *e;
-  struct list child_list = cur->child_list;
   struct thread *child = NULL;
   int child_status;
   enum intr_level old_level;
 
-
-  for (e = list_begin (&child_list); e != list_end (&child_list); e = list_next (e))
+  for (e = list_begin (&cur->child_list); e != list_end (&cur->child_list); e = list_next (e))
   {
-    struct thread *t = list_entry (e, struct thread, elem);
+    struct thread *t = list_entry (e, struct thread, child_elem);
     if (t->tid == child_tid)
     {
       /* interrupts need to be disabled because the process
@@ -119,7 +119,7 @@ process_wait (tid_t child_tid)
   if (child == NULL)
     return -1;
 
-  if (child->exit_status == -1)
+  if (child->exit_status != -1)
     return -1;
 
   sema_down (&child->wait_sema);
@@ -136,6 +136,18 @@ process_exit (void)
   uint32_t *pd;
 
   /* Let parent know this process is exiting and begin termination */
+  struct list_elem *e;
+
+  /* Close the executable file (& allow it to be written on) and
+  free all fd's */
+  file_close (cur->execfile);
+  for (e = list_begin (&cur->file_list); e != list_end (&cur->file_list);
+        e = list_remove (e))
+  {
+    struct file *file = list_entry (e, struct file, elem);
+    file_close (file);
+  }
+
   sema_up (&cur->wait_sema);
   sema_down (&cur->exit_sema);
 
@@ -258,7 +270,6 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   // for argument passing
   char *file_name;
   char *save_ptr;
-  enum intr_level old_level;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -270,10 +281,8 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   file_name = strtok_r (cmdline, " ", &save_ptr);
 
   /* Open executable file, and deny write to the executable */
-  old_level = intr_disable ();
   file = filesys_open (file_name);
   file_deny_write (file);
-  intr_set_level (old_level);
 
   if (file == NULL)
     {

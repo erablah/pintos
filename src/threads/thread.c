@@ -226,6 +226,10 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+#ifdef USERPROG
+  list_push_back (&thread_current ()->child_list, &t->child_elem);
+#endif
+
   /* Add to run queue. */
   thread_unblock (t);
   if (t->priority > thread_current()->priority)
@@ -353,7 +357,18 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
+  struct thread *cur = thread_current ();
+  struct list_elem *e;
+
+  for (e = list_begin (&cur->lock_list); e != list_end (&cur->lock_list);
+        e = list_remove (e))
+  {
+    struct lock *lock = list_entry (e, struct lock, elem);
+    lock_release (lock);
+  }
+
 #ifdef USERPROG
+  list_remove (&cur->child_elem);
   process_exit ();
 #endif
 

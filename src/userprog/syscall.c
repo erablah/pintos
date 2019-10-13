@@ -38,7 +38,8 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_EXEC:                   /* Start another process. */
     {
-      const char *cmd_line = (char*)*((int*)f->esp + 1);
+      char *cmd_line = (char*)*((int*)f->esp + 1);
+      validate (cmd_line);
 
       lock_acquire (&filesys_lock);
       f->eax = exec (cmd_line);
@@ -56,8 +57,10 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_CREATE:                 /* Create a file. */
     {
-      const char *file = (char*)*((int*)f->esp + 1);
+      char *file = (char*)*((int*)f->esp + 1);
       unsigned initial_size = *((unsigned*)f->esp + 2);
+
+      validate (file);
 
       lock_acquire (&filesys_lock);
       f->eax = create (file, initial_size);
@@ -67,7 +70,9 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_REMOVE:                 /* Delete a file. */
     {
-      const char *file = (char*)*((int*)f->esp + 1);
+      char *file = (char*)*((int*)f->esp + 1);
+
+      validate (file);
 
       lock_acquire (&filesys_lock);
       f->eax = remove (file);
@@ -77,7 +82,9 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_OPEN:                   /* Open a file. */
     {
-      const char *file = (char*)*((int*)f->esp + 1);
+      char *file = (char*)*((int*)f->esp + 1);
+
+      validate (file);
 
       f->eax = open (file);
       break;
@@ -97,6 +104,8 @@ syscall_handler (struct intr_frame *f)
       void *buffer = (void*)*((int*)f->esp + 2);
       unsigned size = *((unsigned*)f->esp + 3);
 
+      validate (buffer);
+
       f->eax = read (fd, buffer, size);
       break;
     }
@@ -104,8 +113,10 @@ syscall_handler (struct intr_frame *f)
     case SYS_WRITE:                  /* Write to a file. */
     {
       int fd = *((int*)f->esp + 1);
-      const void *buffer = (void*)*((int*)f->esp + 2);
+      void *buffer = (void*)*((int*)f->esp + 2);
       unsigned size = *((unsigned*)f->esp + 3);
+
+      validate (buffer);
 
       f->eax = write (fd, buffer, size);
       break;
