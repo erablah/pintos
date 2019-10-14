@@ -10,6 +10,7 @@
 #include "devices/input.h"
 #include "userprog/process.h"
 #include <stdio.h>
+#include <string.h>
 
 struct file * fd_to_file (int fd);
 
@@ -60,6 +61,10 @@ int open (const char *file)
 int filesize (int fd)
 {
   struct file *file_ptr = fd_to_file (fd);
+
+  if (file_ptr == NULL)
+    exit (-1);
+
   return file_length (file_ptr);
 }
 
@@ -67,7 +72,12 @@ int read (int fd, void *buffer, unsigned size)
 {
   if (fd == 0)
   {
-    input_getc ();
+    while (size > 0)
+    {
+      *(uint8_t*)buffer = input_getc ();
+      buffer++;
+      size--;
+    }
     return size;
   }
 
@@ -78,6 +88,7 @@ int read (int fd, void *buffer, unsigned size)
 
   if (file_ptr == NULL)
     exit (-1);
+
   return file_read (file_ptr, buffer, size);
 }
 
@@ -104,30 +115,42 @@ int write (int fd, const void *buffer, unsigned size)
 void seek (int fd, unsigned position)
 {
   struct file *file_ptr = fd_to_file (fd);
+
+  if (file_ptr == NULL)
+    exit (-1);
+
   file_seek (file_ptr, position);
 }
 
 unsigned tell (int fd)
 {
   struct file *file_ptr = fd_to_file (fd);
+
+  if (file_ptr == NULL)
+    exit (-1);
+
   return file_tell (file_ptr);
 }
 
 void close (int fd)
 {
   struct file *file_ptr = fd_to_file (fd);
-  file_close (file_ptr);
+
+  file_close (file_ptr); //handles NULL
 }
 
 void
 validate (void *ptr)
 {
   struct thread *cur = thread_current ();
+
   for (int i = 0; i < 4; i++)
   {
-    if (!is_user_vaddr (ptr + i) || ptr + i == NULL
+    if (!is_user_vaddr (ptr + i) || (ptr + i) == NULL
           || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
-      exit (-1);
+      {
+        exit (-1);
+      }
   }
 }
 
@@ -137,7 +160,7 @@ validate1 (void *ptr)
   struct thread *cur = thread_current ();
   for (int i = 4; i < 8; i++)
   {
-    if (!is_user_vaddr (ptr + i) || ptr + i == NULL
+    if (!is_user_vaddr (ptr + i) || (ptr + i) == NULL
           || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
       exit (-1);
   }
@@ -150,7 +173,7 @@ validate2 (void *ptr)
   struct thread *cur = thread_current ();
   for (int i = 8; i < 12; i++)
   {
-    if (!is_user_vaddr (ptr + i) || ptr + i == NULL
+    if (!is_user_vaddr (ptr + i) || (ptr + i) == NULL
           || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
       exit (-1);
   }

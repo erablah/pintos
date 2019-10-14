@@ -5,8 +5,9 @@
 #include "threads/thread.h"
 #include "userprog/syscall_util.h"
 
-static void syscall_handler (struct intr_frame *);
 static struct lock filesys_lock;
+
+static void syscall_handler (struct intr_frame *);
 
 void
 syscall_init (void)
@@ -68,6 +69,7 @@ syscall_handler (struct intr_frame *f)
       char *file = (char*)*((int*)f->esp + 1);
       unsigned initial_size = *((unsigned*)f->esp + 2);
 
+      if (file == NULL) exit (-1);
       validate (file);
 
       lock_acquire (&filesys_lock);
@@ -98,7 +100,9 @@ syscall_handler (struct intr_frame *f)
 
       validate (file);
 
+      lock_acquire (&filesys_lock);
       f->eax = open (file);
+      lock_release (&filesys_lock);
       break;
     }
 
@@ -122,7 +126,9 @@ syscall_handler (struct intr_frame *f)
 
       validate (buffer);
 
+      lock_acquire (&filesys_lock);
       f->eax = read (fd, buffer, size);
+      lock_release (&filesys_lock);
       break;
     }
 
@@ -136,7 +142,9 @@ syscall_handler (struct intr_frame *f)
 
       validate (buffer);
 
+      lock_acquire (&filesys_lock);
       f->eax = write (fd, buffer, size);
+      lock_release (&filesys_lock);
       break;
     }
 

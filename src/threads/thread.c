@@ -228,6 +228,7 @@ thread_create (const char *name, int priority,
 
 #ifdef USERPROG
   list_push_back (&thread_current ()->child_list, &t->child_elem);
+  t->parent = thread_current ();
 #endif
 
   /* Add to run queue. */
@@ -578,6 +579,7 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->child_list);
   sema_init (&t->wait_sema, 0);
   sema_init (&t->exit_sema, 0);
+  sema_init (&t->load_sema, 0);
   t->exit_status = -1;
   t->execfile = NULL;
   list_init (&t->file_list);

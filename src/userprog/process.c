@@ -34,6 +34,8 @@ process_execute (const char *cmdline)
   char *file_name;
   char *save_ptr;
 
+  struct thread *cur = thread_current ();
+
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -51,10 +53,17 @@ process_execute (const char *cmdline)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
 
+  sema_down (&cur->load_sema);
+
   palloc_free_page (cmdline_copy);
 
+  /* If new thread was not created and fn_copy was not freed in
+    start_process () */
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
+
+  if (!cur->load_success)
+    return -1;
 
   return tid;
 }
@@ -127,12 +136,16 @@ process_wait (tid_t child_tid)
   if (child == NULL)
     return -1;
 
-  if (child->exit_status != -1)
-    return -1;
+  ASSERT (child->exit_status == -1)
 
   sema_down (&child->wait_sema);
   child_status = child->exit_status;
   sema_up (&child->exit_sema);
+
+  /* If exception kills thread */
+  if (child->exit_status == -1)
+   return -1;
+
   return child_status;
 }
 
@@ -275,6 +288,7 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+
   // for argument passing
   char *file_name;
   char *save_ptr;
@@ -384,7 +398,18 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   /* We arrive here whether the load is successful or not. If the load was
   successful, keep file open so that writes are denied */
   if (!success)
+  {
+    t->parent->load_success = false;
     file_close (file);
+  }
+
+  else
+  {
+    t->parent->load_success = true;
+  }
+
+
+  sema_up(&t->parent->load_sema);
   return success;
 }
 
