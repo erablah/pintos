@@ -136,15 +136,13 @@ process_wait (tid_t child_tid)
   if (child == NULL)
     return -1;
 
-  ASSERT (child->exit_status == -1)
-
   sema_down (&child->wait_sema);
   child_status = child->exit_status;
   sema_up (&child->exit_sema);
 
   /* If exception kills thread */
   if (child->exit_status == -1)
-   return -1;
+    return -1;
 
   return child_status;
 }
@@ -535,7 +533,7 @@ setup_stack (void **esp, const char *filename, char *args)
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
       {
-        char **args_pointers_begin = palloc_get_page (PAL_USER | PAL_ZERO);
+        char **args_pointers_begin = palloc_get_page (PAL_ZERO);
         char **args_pointers = args_pointers_begin;
 
         int filename_len = strlen (filename);

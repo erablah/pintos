@@ -369,7 +369,6 @@ thread_exit (void)
   }
 
 #ifdef USERPROG
-  list_remove (&cur->child_elem);
   process_exit ();
 #endif
 
