@@ -3,6 +3,7 @@
 
 #include <debug.h>
 #include <list.h>
+#include <hash.h>
 #include <stdint.h>
 #include "threads/synch.h"
 
@@ -115,6 +116,8 @@ struct thread
     struct file *execfile;
     struct list file_list;
     int fd;
+
+    struct hash SPT;
 
 #endif
 

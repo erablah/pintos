@@ -142,12 +142,9 @@ void close (int fd)
 void
 validate (void *ptr)
 {
-  struct thread *cur = thread_current ();
-
   for (int i = 0; i < 4; i++)
   {
-    if (!is_user_vaddr (ptr + i) || (ptr + i) == NULL
-          || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
+    if (!is_user_vaddr (ptr + i) || (ptr + i) == NULL)
       {
         exit (-1);
       }
@@ -157,11 +154,9 @@ validate (void *ptr)
 void
 validate1 (void *ptr)
 {
-  struct thread *cur = thread_current ();
   for (int i = 4; i < 8; i++)
   {
-    if (!is_user_vaddr (ptr + i) || (ptr + i) == NULL
-          || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
+    if (!is_user_vaddr (ptr + i) || (ptr + i) == NULL)
       exit (-1);
   }
 }
@@ -170,11 +165,9 @@ void
 validate2 (void *ptr)
 {
   validate1 (ptr);
-  struct thread *cur = thread_current ();
   for (int i = 8; i < 12; i++)
   {
-    if (!is_user_vaddr (ptr + i) || (ptr + i) == NULL
-          || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
+    if (!is_user_vaddr (ptr + i) || (ptr + i) == NULL)
       exit (-1);
   }
 }
@@ -184,11 +177,9 @@ validate3 (void *ptr)
 {
   validate1 (ptr);
   validate2 (ptr);
-  struct thread *cur = thread_current ();
   for (int i = 12; i < 16; i++)
   {
-    if (!is_user_vaddr (ptr + i) || ptr + i == NULL
-          || pagedir_get_page (cur->pagedir , ptr + i) == NULL)
+    if (!is_user_vaddr (ptr + i) || ptr + i == NULL)
       exit (-1);
   }
 }

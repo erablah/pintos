@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "vm/suppage.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -229,6 +230,7 @@ thread_create (const char *name, int priority,
 #ifdef USERPROG
   list_push_back (&thread_current ()->child_list, &t->child_elem);
   t->parent = thread_current ();
+  SPT_init (&t->SPT);
 #endif
 
   /* Add to run queue. */
