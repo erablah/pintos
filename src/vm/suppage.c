@@ -37,7 +37,7 @@ destructor_ (struct hash_elem *e, void *aux UNUSED)
   {
     swap_delete (entry->index);
   }
-  else
+  else if (!entry->is_mmap)
   {
     struct frame_table_entry *fte = fte_lookup (entry->frame);
     lock_acquire (&fte->lock);
