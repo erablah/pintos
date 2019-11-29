@@ -228,6 +228,8 @@ page_fault (struct intr_frame *f)
 
   struct thread *t = thread_current ();
 
+  // printf ("(%s) fault addr: %p\n", t->name, fault_addr);
+
   if (!user)
     f->esp = t->esp;
 
@@ -254,23 +256,7 @@ page_fault_handler (struct intr_frame *f, void *fault_addr)
   struct thread *t = thread_current ();
   struct frame_table_entry *fte;
 
-  /* Stack Growth. */
-  if (f->esp - 32 <= fault_addr)
-  {
-      void *upage = pg_round_down (fault_addr);
-
-      acquire_frame_lock ();
-      fte = frame_alloc (PAL_USER | PAL_ZERO);
-
-      writable = true;
-      success = allocate_page (upage, fte, writable);
-      release_frame_lock ();
-
-      if (!success)
-        palloc_free_page (fte->frame);
-  }
-
-  else if ( (SPT_entry_ptr = SPT_lookup (&t->SPT, fault_addr)) != NULL )
+  if ( (SPT_entry_ptr = SPT_lookup (&t->SPT, fault_addr)) != NULL )
   {
     /* Page Reclaimation. */
     if (SPT_entry_ptr->evicted)
@@ -317,6 +303,22 @@ page_fault_handler (struct intr_frame *f, void *fault_addr)
       // shouldn't arrive here
       ASSERT (1 == 0);
     }
+  }
+
+  /* Stack Growth. */
+  else if (f->esp - 32 <= fault_addr)
+  {
+      void *upage = pg_round_down (fault_addr);
+
+      acquire_frame_lock ();
+      fte = frame_alloc (PAL_USER | PAL_ZERO);
+
+      writable = true;
+      success = allocate_page (upage, fte, writable);
+      release_frame_lock ();
+
+      if (!success)
+        palloc_free_page (fte->frame);
   }
 
   else

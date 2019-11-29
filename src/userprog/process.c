@@ -143,7 +143,7 @@ process_wait (tid_t child_tid)
   sema_up (&child->exit_sema);
 
   /* If exception kills thread */
-  if (child->exit_status == -1)
+  if (child_status == -1)
     return -1;
 
   return child_status;
@@ -179,7 +179,7 @@ process_exit (void)
 
   execpage_destroy ();
   SPT_destroy ();
-  
+
   sema_up (&cur->wait_sema);
   sema_down (&cur->exit_sema);
 
