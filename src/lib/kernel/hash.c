@@ -207,6 +207,18 @@ hash_first (struct hash_iterator *i, struct hash *h)
   i->elem = list_elem_to_hash_elem (list_head (i->bucket));
 }
 
+void
+hash_iter_set (struct hash_iterator *i, struct hash *h, struct hash_elem *e)
+{
+  ASSERT (i != NULL);
+  ASSERT (e != NULL);
+  ASSERT (h != NULL);
+
+  i->hash = h;
+  i->bucket = find_bucket (h, e);
+  i->elem = e;
+}
+
 /* Advances I to the next element in the hash table and returns
    it.  Returns a null pointer if no elements are left.  Elements
    are returned in arbitrary order.

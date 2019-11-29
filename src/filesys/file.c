@@ -1,5 +1,6 @@
 #include "filesys/file.h"
 #include <debug.h>
+#include <stdio.h>
 #include "filesys/inode.h"
 #include "threads/malloc.h"
 #include "threads/thread.h"
@@ -11,7 +12,7 @@
 struct file *
 file_open (struct inode *inode)
 {
-  struct file *file = calloc (1, sizeof *file);
+  struct file *file = calloc (1, sizeof (struct file));
   struct thread *cur = thread_current ();
 
   if (inode != NULL && file != NULL)
@@ -131,6 +132,8 @@ file_deny_write (struct file *file)
 void
 file_allow_write (struct file *file)
 {
+  // printf ("file deny write: %d\n", file->deny_write);
+  // printf ("file fd: %d\n", file->fd);
   ASSERT (file != NULL);
   if (file->deny_write)
     {

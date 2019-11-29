@@ -1,15 +1,20 @@
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
+#include <string.h>
+#include <debug.h>
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/palloc.h"
+#include "userprog/syscall.h"
 #include "userprog/syscall_util.h"
 #include "userprog/pagedir.h"
 #include "threads/vaddr.h"
-#include "vm/suppage.h"
 #include "vm/frame.h"
+#include "vm/swap.h"
+#include "vm/execpage.h"
 
 
 /* Number of page faults processed. */
@@ -17,7 +22,7 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
-static bool allocate_page (void *);
+static struct frame_table_entry* lazy_load (void *, struct thread *);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -75,13 +80,7 @@ exception_print_stats (void)
   printf ("Exception: %lld page faults\n", page_fault_cnt);
 }
 
-bool
-allocate_page (void *upage)
-{
-  void *kpage = frame_alloc (PAL_USER | PAL_ZERO);
-  return pagedir_set_page (thread_current ()->pagedir, upage, kpage,
-                  true);
-}
+
 
 
 /* Handler for an exception (probably) caused by a user process. */
@@ -125,6 +124,68 @@ kill (struct intr_frame *f)
     }
 }
 
+struct frame_table_entry *
+lazy_load (void *fault_addr, struct thread *t)
+{
+  bool success = false;
+
+  struct execpage_entry *execpage_entry_ptr =
+        execpage_lookup (&t->execpage, fault_addr);
+
+  if (execpage_entry_ptr != NULL)
+  {
+    struct file *file = t->execfile;
+    off_t ofs = execpage_entry_ptr->ofs;
+    void *upage = execpage_entry_ptr->upage;
+    size_t page_read_bytes = execpage_entry_ptr->page_read_bytes;
+    size_t page_zero_bytes = execpage_entry_ptr->page_zero_bytes;
+    bool writable = execpage_entry_ptr->writable;
+
+    //acquire_filesys_lock ();
+    acquire_frame_lock ();
+
+    file_seek (file, ofs);
+
+    /* Get a page of memory. */
+    struct frame_table_entry *fte = frame_alloc (PAL_USER);
+    success = allocate_page (upage, fte, writable);
+
+    release_frame_lock ();
+
+
+    uint8_t *kpage = fte->frame;
+
+    /* Load this page. */
+
+    if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+      {
+        palloc_free_page (kpage);
+        ASSERT (2 == 0);
+      }
+
+    memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+    //release_filesys_lock ();
+
+
+
+
+    if (!success)
+    {
+      palloc_free_page (kpage);
+      return NULL;
+    }
+    else
+      return fte;
+  }
+
+  else
+  {
+    exit (-1);
+    NOT_REACHED ();
+  }
+}
+
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
@@ -143,10 +204,6 @@ page_fault (struct intr_frame *f)
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
-
-  bool success = false;
-  struct SPT_entry *SPT_entry_ptr;
-  struct thread *t = thread_current ();
 
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
@@ -169,41 +226,106 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-/* Allocate new page. */
-  if ( user && not_present && (f->esp + 32 <= fault_addr) )
+  struct thread *t = thread_current ();
+
+  if (!user)
+    f->esp = t->esp;
+
+  if (not_present && fault_addr != NULL && is_user_vaddr (fault_addr))
   {
-    SPT_entry_ptr = SPT_lookup (t->SPT, fault_addr);
-
-    if (SPT_entry_ptr != NULL)
-    {
-      if (SPT_entry_ptr->evicted)
-      {
-        // swap page here
-      }
-    }
-
-    else
-    {
-        void *upage = pg_round_down (fault_addr);
-        success = allocate_page (upage);
-        if (success)
-        {
-          struct SPT_entry SPT_entry;
-          SPT_entry.page = upage;
-          SPT_entry.evicted = false;
-          hash_insert (&t->SPT, &SPT_entry.elem);
-        }
-    }
+      struct frame_table_entry *fte = page_fault_handler (f, fault_addr);
+      lock_release (&fte->lock);
   }
-
 
   else
   {
-    printf ("Page fault at %p: %s error %s page in %s context.\n",
-            fault_addr,
-            not_present ? "not present" : "rights violation",
-            write ? "writing" : "reading",
-            user ? "user" : "kernel");
-    kill (f);
+    exit (-1);
   }
+
+}
+
+
+struct frame_table_entry *
+page_fault_handler (struct intr_frame *f, void *fault_addr)
+{
+  bool writable;
+  bool success = false;
+  struct SPT_entry *SPT_entry_ptr;
+  struct thread *t = thread_current ();
+  struct frame_table_entry *fte;
+
+  /* Stack Growth. */
+  if (f->esp - 32 <= fault_addr)
+  {
+      void *upage = pg_round_down (fault_addr);
+
+      acquire_frame_lock ();
+      fte = frame_alloc (PAL_USER | PAL_ZERO);
+
+      writable = true;
+      success = allocate_page (upage, fte, writable);
+      release_frame_lock ();
+
+      if (!success)
+        palloc_free_page (fte->frame);
+  }
+
+  else if ( (SPT_entry_ptr = SPT_lookup (&t->SPT, fault_addr)) != NULL )
+  {
+    /* Page Reclaimation. */
+    if (SPT_entry_ptr->evicted)
+    {
+      void *upage = pg_round_down (fault_addr);
+
+      acquire_frame_lock ();
+      fte = frame_alloc (PAL_USER | PAL_ZERO);
+      swap_in (fte, SPT_entry_ptr->index);
+      reclaim_page (SPT_entry_ptr, upage, fte);
+      release_frame_lock ();
+    }
+
+    else if (SPT_entry_ptr->is_mmap)
+    {
+      //printf ("loading\n");
+      void *upage = pg_round_down (fault_addr);
+
+      acquire_frame_lock();
+      fte = frame_alloc (PAL_USER | PAL_ZERO);
+      //printf ("fteframe %p\n", fte->frame);
+      reclaim_page (SPT_entry_ptr, upage, fte);
+
+      release_frame_lock ();
+
+      void *kpage = fte->frame;
+      struct file *file = SPT_entry_ptr->mmap_file;
+      off_t offset = SPT_entry_ptr->mmap_offset;
+      size_t page_read_bytes = SPT_entry_ptr->mmap_read_bytes;
+      size_t page_zero_bytes = SPT_entry_ptr->mmap_zero_bytes;
+
+      file_seek (file, offset);
+
+      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+        {
+          palloc_free_page (kpage);
+          ASSERT (2 == 0);
+        }
+
+      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+    }
+    else
+    {
+      // shouldn't arrive here
+      ASSERT (1 == 0);
+    }
+  }
+
+  else
+  {
+    /* Lazy Executable Loading. */
+    //printf ("lazy1\n");
+    fte = lazy_load (fault_addr, t);
+    ASSERT (fte != NULL);
+  }
+
+  return fte;
 }

@@ -26,7 +26,7 @@
 #include "list.h"
 
 /* Hash element. */
-struct hash_elem 
+struct hash_elem
   {
     struct list_elem list_elem;
   };
@@ -56,7 +56,7 @@ typedef bool hash_less_func (const struct hash_elem *a,
 typedef void hash_action_func (struct hash_elem *e, void *aux);
 
 /* Hash table. */
-struct hash 
+struct hash
   {
     size_t elem_cnt;            /* Number of elements in table. */
     size_t bucket_cnt;          /* Number of buckets, a power of 2. */
@@ -67,7 +67,7 @@ struct hash
   };
 
 /* A hash table iterator. */
-struct hash_iterator 
+struct hash_iterator
   {
     struct hash *hash;          /* The hash table. */
     struct list *bucket;        /* Current bucket. */
@@ -88,6 +88,7 @@ struct hash_elem *hash_delete (struct hash *, struct hash_elem *);
 /* Iteration. */
 void hash_apply (struct hash *, hash_action_func *);
 void hash_first (struct hash_iterator *, struct hash *);
+void hash_iter_set (struct hash_iterator *, struct hash *, struct hash_elem *);
 struct hash_elem *hash_next (struct hash_iterator *);
 struct hash_elem *hash_cur (struct hash_iterator *);
 

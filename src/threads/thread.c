@@ -14,6 +14,7 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #include "vm/suppage.h"
+#include "vm/execpage.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -95,6 +96,8 @@ comp1 (const struct list_elem *a, const struct list_elem *b, void *aux)
   }
   return first->priority < second->priority;
 }
+
+
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -231,6 +234,8 @@ thread_create (const char *name, int priority,
   list_push_back (&thread_current ()->child_list, &t->child_elem);
   t->parent = thread_current ();
   SPT_init (&t->SPT);
+  execpage_init (&t->execpage);
+  t->esp = NULL;
 #endif
 
   /* Add to run queue. */
@@ -584,7 +589,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->exit_status = -1;
   t->execfile = NULL;
   list_init (&t->file_list);
+  list_init (&t->mmap_list);
   t->fd = 3;
+  t->mapid = 1;
 #endif
 
   old_level = intr_disable ();

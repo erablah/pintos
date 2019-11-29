@@ -1,5 +1,6 @@
 #include "userprog/pagedir.h"
 #include <stdbool.h>
+#include <stdio.h>
 #include <stddef.h>
 #include <string.h>
 #include "threads/init.h"
@@ -105,13 +106,19 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
   ASSERT (is_user_vaddr (upage));
   ASSERT (vtop (kpage) >> PTSHIFT < init_ram_pages);
   ASSERT (pd != init_page_dir);
+  bool dirty_bit;
+  bool accessed_bit;
 
   pte = lookup_page (pd, upage, true);
 
   if (pte != NULL)
     {
       ASSERT ((*pte & PTE_P) == 0);
+      dirty_bit = pagedir_is_dirty (pd, upage);
+      accessed_bit = pagedir_is_accessed (pd, upage);
       *pte = pte_create_user (kpage, writable);
+      pagedir_set_dirty (pd, upage, dirty_bit);
+      pagedir_set_accessed (pd, upage, accessed_bit);
       return true;
     }
   else

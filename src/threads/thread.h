@@ -118,12 +118,27 @@ struct thread
     int fd;
 
     struct hash SPT;
+    struct hash execpage;
+    void *esp;
+
+    struct list mmap_list;
+    int mapid;
 
 #endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+struct mmap_entry
+{
+  int mapid;
+  struct file *file;
+  uint32_t length;
+  void *addr;
+  struct list_elem mmap_elem;
+
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.

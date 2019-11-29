@@ -1,13 +1,30 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <debug.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include "userprog/syscall_util.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
+#include "vm/frame.h"
+#include "userprog/exception.h"
+#include <string.h>
 
 static struct lock filesys_lock;
 
 static void syscall_handler (struct intr_frame *);
+
+void acquire_filesys_lock (void)
+{
+  lock_acquire (&filesys_lock);
+}
+
+void release_filesys_lock (void)
+{
+  lock_release (&filesys_lock);
+}
 
 void
 syscall_init (void)
@@ -19,7 +36,8 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f)
 {
-  validate (f->esp);
+  thread_current ()->esp = f->esp;
+  validate_sp (f->esp);
 
   switch (*(int*)f->esp)
   {
@@ -55,6 +73,8 @@ syscall_handler (struct intr_frame *f)
     case SYS_WAIT:                   /* Wait for a child process to die. */
     {
       validate1 (f->esp);
+
+      //printf ("wait\n");
 
       pid_t pid = *((pid_t*)f->esp + 1);
 
@@ -94,6 +114,7 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_OPEN:                   /* Open a file. */
     {
+      //printf ("open\n");
       validate1 (f->esp);
 
       char *file = (char*)*((int*)f->esp + 1);
@@ -118,44 +139,68 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_READ:                   /* Read from a file. */
     {
+      //printf ("read\n");
       validate3 (f->esp);
 
       int fd = *((int*)f->esp + 1);
       void *buffer = (void*)*((int*)f->esp + 2);
       unsigned size = *((unsigned*)f->esp + 3);
 
-      validate (buffer);
-
       lock_acquire (&filesys_lock);
-      f->eax = read (fd, buffer, size);
+      f->eax = read (fd, buffer, size, f);
       lock_release (&filesys_lock);
+
       break;
     }
 
     case SYS_WRITE:                  /* Write to a file. */
     {
+      //printf ("write\n");
       validate3 (f->esp);
 
       int fd = *((int*)f->esp + 1);
       void *buffer = (void*)*((int*)f->esp + 2);
       unsigned size = *((unsigned*)f->esp + 3);
 
-      validate (buffer);
-
       lock_acquire (&filesys_lock);
       f->eax = write (fd, buffer, size);
       lock_release (&filesys_lock);
+
       break;
     }
 
     case SYS_SEEK:                   /* Change position in a file. */
     {
+      //printf ("seek\n");
       validate2 (f->esp);
 
       int fd = *((int*)f->esp + 1);
       unsigned position = *((unsigned*)f->esp + 2);
 
       seek (fd, position);
+      break;
+    }
+
+    case SYS_MMAP:
+    {
+      //printf ("mmap\n");
+      validate2 (f->esp);
+
+      int fd = *((int*)f->esp + 1);
+      void *addr = (void*)*((int*)f->esp + 2);
+
+      f->eax = mmap (fd, addr);
+      break;
+    }
+
+    case SYS_MUNMAP:
+    {
+      //printf ("mummap\n");
+      validate1 (f->esp);
+
+      int fd = *((int*)f->esp + 1);
+
+      munmap (fd);
       break;
     }
 
@@ -171,6 +216,7 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_CLOSE:                  /* Close a file. */
     {
+      //printf ("close\n");
       validate1 (f->esp);
 
       int fd = *((int*)f->esp + 1);
@@ -181,7 +227,7 @@ syscall_handler (struct intr_frame *f)
 
     default:
     {
-      ASSERT (1);
+      ASSERT (0);
       break;
     }
   }
