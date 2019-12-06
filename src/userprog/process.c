@@ -312,8 +312,6 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   /* Separate file_name and args for argument passing */
   file_name = strtok_r (cmdline, " ", &save_ptr);
 
-  printf ("loading\n");
-
   file = filesys_open (file_name);
 
   if (file == NULL)
@@ -337,8 +335,6 @@ load (const char *cmdline, void (**eip) (void), void **esp)
       goto done;
     }
 
-  printf ("phnum: %d\n", ehdr.e_phnum);
-
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++)
@@ -353,7 +349,7 @@ load (const char *cmdline, void (**eip) (void), void **esp)
         goto done;
 
       file_ofs += sizeof phdr;
-      printf ("before switch \n");
+
       switch (phdr.p_type)
         {
         case PT_NULL:

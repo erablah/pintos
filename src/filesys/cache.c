@@ -78,9 +78,13 @@ cache_allocate (block_sector_t sector)
   }
 
   if (idx != -1)
+  {
     lock_acquire (&cache[idx].lock);
+  }
   else
+  {
     idx = cache_evict ();
+  }
 
   // Insert here
   cache[idx].sector = sector;
@@ -102,15 +106,14 @@ cache_load (struct cache_entry *cache_entry)
   ASSERT (cache_entry != NULL);
 
 
-  memset (&cache_entry->buffer, 0, BLOCK_SECTOR_SIZE);
-  block_read (fs_device, cache_entry->sector, &cache_entry->buffer);
+  memset (cache_entry->buffer, 0, BLOCK_SECTOR_SIZE);
+  block_read (fs_device, cache_entry->sector, cache_entry->buffer);
   cache_entry->loaded = 1;
 }
 
 static int
 cache_evict (void)
 {
-  printf ("evict\n");
   while (1)
   {
     for (int i = iter_idx; i < 64; i++)
@@ -125,7 +128,7 @@ cache_evict (void)
           iter_idx = i + 1;
           // Write back
           if (cache[i].dirty)
-            block_write (fs_device, cache[i].sector, &cache[i].buffer);
+            block_write (fs_device, cache[i].sector, cache[i].buffer);
 
           return i;
         }
@@ -136,34 +139,29 @@ cache_evict (void)
 }
 
 void
-write_back (void *aux UNUSED)
+cache_write_at (block_sector_t sector, const void *buffer, int ofs, int size)
 {
-  while (1)
-  {
-    thread_sleep (50);
-    for (int i = 0; i < 64; i++)
-    {
-      if (cache[i].dirty && cache[i].valid)
-      {
-        lock_acquire (&cache[i].lock);
-        block_write (fs_device, cache[i].sector, &cache[i].buffer);
-        cache[i].dirty = 0;
-        lock_release (&cache[i].lock);
-      }
-    }
-  }
-}
-
-void
-cache_read_at (block_sector_t sector, void *buffer, int ofs, int size)
-{
-  printf ("read from cache\n");
   int idx = cache_allocate (sector);
 
   if (!cache[idx].loaded)
     cache_load (&cache[idx]);
 
-  memcpy (buffer, &cache[idx].buffer + ofs, size);
+  memcpy (cache[idx].buffer + ofs, buffer, size);
+  cache[idx].dirty = 1;
+  cache[idx].accessed = 1;
+  lock_release (&cache[idx].lock);
+}
+
+
+void
+cache_read_at (block_sector_t sector, void *buffer, int ofs, int size)
+{
+  int idx = cache_allocate (sector);
+
+  if (!cache[idx].loaded)
+    cache_load (&cache[idx]);
+
+  memcpy (buffer, cache[idx].buffer + ofs, size);
   cache[idx].accessed = 1;
   lock_release (&cache[idx].lock);
 
@@ -189,8 +187,6 @@ cache_read_at (block_sector_t sector, void *buffer, int ofs, int size)
   }
 
   lock_release (&cache[next].lock);
-
-  printf ("read done\n");
 }
 
 
@@ -226,18 +222,20 @@ read_ahead (void *aux UNUSED)
 }
 
 void
-cache_write_at (block_sector_t sector, const void *buffer, int ofs, int size)
+write_back (void *aux UNUSED)
 {
-  printf ("write to cache\n");
-  int idx = cache_allocate (sector);
-
-  if (!cache[idx].loaded)
-    cache_load (&cache[idx]);
-
-  memcpy (&cache[idx].buffer + ofs, buffer, size);
-  cache[idx].dirty = 1;
-  cache[idx].accessed = 1;
-  lock_release (&cache[idx].lock);
-
-  printf ("write done\n");
+  while (1)
+  {
+    thread_sleep (50);
+    for (int i = 0; i < 64; i++)
+    {
+      if (cache[i].dirty && cache[i].valid)
+      {
+        lock_acquire (&cache[i].lock);
+        block_write (fs_device, cache[i].sector, cache[i].buffer);
+        cache[i].dirty = 0;
+        lock_release (&cache[i].lock);
+      }
+    }
+  }
 }

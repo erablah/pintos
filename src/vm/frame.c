@@ -227,7 +227,6 @@ choose_victim (void)
                 hash_entry (hash_cur (&i), struct frame_table_entry, elem);
           global_frame = next_fte->frame;
         }
-        printf ("evicting %p\n", fte->frame);
         return fte;
       }
     }

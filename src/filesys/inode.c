@@ -333,5 +333,7 @@ inode_length (const struct inode *inode)
 {
   struct inode_disk *disk_inode = get_disk_inode (inode);
   ASSERT (disk_inode != NULL);
-  return disk_inode->length;
+  off_t ret = disk_inode->length;
+  free (disk_inode);
+  return ret;
 }

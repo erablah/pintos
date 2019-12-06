@@ -181,7 +181,6 @@ lazy_load (void *fault_addr, struct thread *t)
 
   else
   {
-    printf ("2222222222\n");
     exit (-1);
     NOT_REACHED ();
   }
@@ -229,7 +228,7 @@ page_fault (struct intr_frame *f)
 
   struct thread *t = thread_current ();
 
-  printf ("fault addr: %p\n", fault_addr);
+  //printf ("fault addr: %p\n", fault_addr);
 
   if (!user)
     f->esp = t->esp;
@@ -242,7 +241,6 @@ page_fault (struct intr_frame *f)
 
   else
   {
-    printf ("111111111\n");
     exit (-1);
   }
 
