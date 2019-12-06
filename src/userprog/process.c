@@ -122,7 +122,6 @@ process_wait (tid_t child_tid)
   struct list_elem *e;
   struct thread *child = NULL;
   int child_status;
-  enum intr_level old_level;
 
   for (e = list_begin (&cur->child_list); e != list_end (&cur->child_list); e = list_next (e))
   {
@@ -313,6 +312,8 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   /* Separate file_name and args for argument passing */
   file_name = strtok_r (cmdline, " ", &save_ptr);
 
+  printf ("loading\n");
+
   file = filesys_open (file_name);
 
   if (file == NULL)
@@ -336,6 +337,8 @@ load (const char *cmdline, void (**eip) (void), void **esp)
       goto done;
     }
 
+  printf ("phnum: %d\n", ehdr.e_phnum);
+
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++)
@@ -348,7 +351,9 @@ load (const char *cmdline, void (**eip) (void), void **esp)
 
       if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
         goto done;
+
       file_ofs += sizeof phdr;
+      printf ("before switch \n");
       switch (phdr.p_type)
         {
         case PT_NULL:
