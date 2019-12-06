@@ -8,7 +8,7 @@
 #include "threads/synch.h"
 
 static struct hash frame_table;
-//static void *global_frame;
+static void *global_frame;
 static struct lock frame_lock;
 
 
@@ -189,72 +189,47 @@ choose_victim (void)
 
   while (1)
   {
-    hash_first (&i, &frame_table);
-    while (hash_next (&i))
+    if (global_frame == NULL)
+    {
+      hash_first (&i, &frame_table);
+      hash_next (&i);
+    }
+    else
+    {
+      struct frame_table_entry *next_fte = fte_lookup (global_frame);
+      ASSERT (next_fte != NULL)
+      hash_iter_set (&i, &frame_table, &next_fte->elem);
+    }
+
+    while (1)
+    {
+      if (hash_cur (&i) == NULL)
       {
-        fte = hash_entry (hash_cur (&i), struct frame_table_entry, elem);
-        ASSERT (fte != NULL);
-        ASSERT (fte->aux != NULL);
-        ASSERT (fte->owner != NULL);
-        ASSERT (fte->owner->pagedir != NULL);
-
-        upage = fte->aux->page;
-        if (pagedir_is_accessed (fte->owner->pagedir, upage))
-        {
-          pagedir_set_accessed (fte->owner->pagedir, upage, false);
-          //hash_next (&i);
-        }
-        else if (lock_try_acquire (&fte->lock))
-        {
-          //printf ("Victim: %p\n", fte->aux->page);
-          return fte;
-        }
+        global_frame = NULL;
+        break;
       }
+      fte = hash_entry (hash_cur (&i), struct frame_table_entry, elem);
+      upage = fte->aux->page;
+      if (pagedir_is_accessed (fte->owner->pagedir, upage))
+      {
+        pagedir_set_accessed (fte->owner->pagedir, upage, false);
+        hash_next (&i);
+      }
+      else if (lock_try_acquire (&fte->lock))
+      {
+        if (hash_next (&i) == NULL)
+        {
+          global_frame = NULL;
+        }
+        else
+        {
+          struct frame_table_entry *next_fte =
+                hash_entry (hash_cur (&i), struct frame_table_entry, elem);
+          global_frame = next_fte->frame;
+        }
+        printf ("evicting %p\n", fte->frame);
+        return fte;
+      }
+    }
   }
-
-  // while (1)
-  // {
-  //   if (global_frame == NULL)
-  //   {
-  //     hash_first (&i, &frame_table);
-  //     hash_next (&i);
-  //   }
-  //   else
-  //   {
-  //     struct frame_table_entry *next_fte = fte_lookup (global_frame);
-  //     ASSERT (next_fte != NULL)
-  //     hash_iter_set (&i, &frame_table, &next_fte->elem);
-  //   }
-  //
-  //   while (1)
-  //   {
-  //     if (hash_cur (&i) == NULL)
-  //     {
-  //       global_frame = NULL;
-  //       break;
-  //     }
-  //     fte = hash_entry (hash_cur (&i), struct frame_table_entry, elem);
-  //     upage = fte->aux->page;
-  //     if (pagedir_is_accessed (fte->owner->pagedir, upage))
-  //     {
-  //       pagedir_set_accessed (fte->owner->pagedir, upage, false);
-  //       hash_next (&i);
-  //     }
-  //     else
-  //     {
-  //       if (hash_next (&i) == NULL)
-  //       {
-  //         global_frame = NULL;
-  //         break;
-  //       }
-  //       struct frame_table_entry *next_fte =
-  //             hash_entry (hash_cur (&i), struct frame_table_entry, elem);
-  //       global_frame = next_fte->frame;;
-  //       printf ("Victim: %p\n", fte->frame);
-  //       printf ("Global_Frame: %p\n", global_frame);
-  //       printf ("Global Page: %p\n", next_fte->aux->page);
-  //       return fte;
-  //     }
-  //   }
-  // }
 }

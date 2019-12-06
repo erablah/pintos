@@ -228,8 +228,6 @@ page_fault (struct intr_frame *f)
 
   struct thread *t = thread_current ();
 
-  // printf ("(%s) fault addr: %p\n", t->name, fault_addr);
-
   if (!user)
     f->esp = t->esp;
 
