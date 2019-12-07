@@ -8,6 +8,8 @@
 #include "devices/shutdown.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
+#include "filesys/inode.h"
 #include <console.h>
 #include <debug.h>
 #include "devices/input.h"
@@ -68,6 +70,9 @@ int open (const char *file)
 // what if invalid fd? assertion in file_length () will be called
 int filesize (int fd)
 {
+  if (isdir (fd))
+    exit (-1);
+
   struct file *file_ptr = fd_to_file (fd);
 
   if (file_ptr == NULL)
@@ -94,7 +99,7 @@ int read (int fd, void *buffer, unsigned size, struct intr_frame *f)
     return size;
   }
 
-  if (fd == 1)
+  if (fd == 1 || isdir (fd))
     exit (-1);
 
   struct file *file_ptr = fd_to_file (fd);
@@ -153,7 +158,7 @@ int write (int fd, void *buffer, unsigned size)
     return (int)size;
   }
 
-  if (fd == 0)
+  if (fd == 0 || isdir (fd))
     exit (-1);
 
   struct file *file_ptr = fd_to_file (fd);
@@ -197,6 +202,39 @@ int write (int fd, void *buffer, unsigned size)
   return ret;
 }
 
+void seek (int fd, unsigned position)
+{
+  if (isdir (fd))
+    exit (-1);
+
+  struct file *file_ptr = fd_to_file (fd);
+
+  if (file_ptr == NULL)
+    exit (-1);
+
+  file_seek (file_ptr, position);
+}
+
+unsigned tell (int fd)
+{
+  if (isdir (fd))
+    exit (-1);
+
+  struct file *file_ptr = fd_to_file (fd);
+
+  if (file_ptr == NULL)
+    exit (-1);
+
+  return file_tell (file_ptr);
+}
+
+void close (int fd)
+{
+  struct file *file_ptr = fd_to_file (fd);
+
+  file_close (file_ptr); //handles NULL
+}
+
 int mmap (int fd, void *addr)
 {
   struct thread *t = thread_current ();
@@ -204,7 +242,7 @@ int mmap (int fd, void *addr)
 
   off_t offset = 0;
 
-  if (fd == 1 || fd == 0)
+  if (fd == 1 || fd == 0 || isdir (fd))
     return -1;
 
   if (ptr == NULL || !is_user_vaddr (addr) || pg_round_down (addr) != addr || addr == NULL)
@@ -283,31 +321,80 @@ void munmap (int mapping)
   free (mmap_entry);
 }
 
-void seek (int fd, unsigned position)
+bool
+chdir (const char *dir)
 {
-  struct file *file_ptr = fd_to_file (fd);
+  struct dir *temp_dir = NULL;
+  size_t len = strlen (dir);
+  char *dir_copy = calloc (len, sizeof (char));
+  bool success = false;
+  struct thread *t = thread_current ();
 
-  if (file_ptr == NULL)
-    exit (-1);
+  strlcpy (dir_copy, dir, len);
 
-  file_seek (file_ptr, position);
+  if (*dir_copy == '/')
+    temp_dir = dir_open_root ();
+  else
+    temp_dir = dir_reopen (t->dir);
+
+  char *token, *save_ptr;
+  struct inode *inode = NULL;
+
+  for (token = strtok_r (dir_copy, "/", &save_ptr); token != NULL;
+        token = strtok_r (NULL, "/", &save_ptr))
+  {
+    if (!dir_lookup (temp_dir, token, &inode))
+      goto done;
+
+    if (!inode_isdir (inode))
+    {
+      inode_close (inode);
+      goto done;
+    }
+
+    dir_close (temp_dir);
+
+    temp_dir = dir_open (inode);
+  }
+
+  t->dir = temp_dir;
+  success = true;
+
+  done:
+    free (dir_copy);
+
+    if (!success)
+      dir_close (temp_dir);
+
+    return success;
 }
 
-unsigned tell (int fd)
+bool
+mkdir (const char *dir)
 {
-  struct file *file_ptr = fd_to_file (fd);
-
-  if (file_ptr == NULL)
-    exit (-1);
-
-  return file_tell (file_ptr);
+  return 1;
 }
 
-void close (int fd)
+bool
+readdir (int fd, char *name)
 {
-  struct file *file_ptr = fd_to_file (fd);
+  return 1;
+}
 
-  file_close (file_ptr); //handles NULL
+bool
+isdir (int fd)
+{
+  struct file *file = fd_to_file (fd);
+
+  return inode_isdir (file_get_inode (file));
+}
+
+int
+inumber (int fd)
+{
+  struct file *file = fd_to_file (fd);
+
+  return inode_get_inumber (file_get_inode (file));
 }
 
 void

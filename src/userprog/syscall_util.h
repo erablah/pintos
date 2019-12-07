@@ -15,11 +15,17 @@ int open (const char *);
 int filesize (int);
 int read (int, void *, unsigned, struct intr_frame *);
 int write (int, void *, unsigned);
-int mmap (int, void *);
-void munmap (int);
 void seek (int, unsigned);
 unsigned tell (int);
 void close (int);
+int mmap (int, void *);
+void munmap (int);
+bool chdir (const char *);
+bool mkdir (const char *);
+bool readdir (int, char *);
+bool isdir (int);
+int inumber (int);
+
 
 void validate_sp (void *);
 void validate (void *);

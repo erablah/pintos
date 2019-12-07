@@ -15,6 +15,7 @@
 #include "userprog/process.h"
 #include "vm/suppage.h"
 #include "vm/execpage.h"
+#include "filesys/directory.h"
 #endif
 
 /* Random value for struct thread's `magic' member.

@@ -18,8 +18,10 @@ struct inode_disk
   {
     block_sector_t start;               /* First data sector. */
     off_t length;                       /* File size in bytes. */
+    bool isdir;                        /* Is directory? */
+    int entry_cnt;                      /* Number of entries in directory */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[125];               /* Not used. */
+    uint32_t unused[123];               /* Not used. */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -100,7 +102,7 @@ inode_init (void)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length)
+inode_create (block_sector_t sector, off_t length, bool isdir)
 {
   struct inode_disk *disk_inode = NULL;
   bool success = false;
@@ -117,6 +119,8 @@ inode_create (block_sector_t sector, off_t length)
       size_t sectors = bytes_to_sectors (length);
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
+      disk_inode->isdir = isdir;
+      disk_inode->entry_cnt = 0;
       if (free_map_allocate (sectors, &disk_inode->start))
         {
           // block_write (fs_device, sector, disk_inode);
@@ -187,6 +191,12 @@ block_sector_t
 inode_get_inumber (const struct inode *inode)
 {
   return inode->sector;
+}
+
+int
+inode_get_open_cnt (const struct inode *inode)
+{
+  return inode->open_cnt;
 }
 
 /* Closes INODE and writes it to disk.
@@ -334,6 +344,47 @@ inode_length (const struct inode *inode)
   struct inode_disk *disk_inode = get_disk_inode (inode);
   ASSERT (disk_inode != NULL);
   off_t ret = disk_inode->length;
+  free (disk_inode);
+  return ret;
+}
+
+bool
+inode_isdir (const struct inode *inode)
+{
+  struct inode_disk *disk_inode = get_disk_inode (inode);
+  ASSERT (disk_inode != NULL);
+  bool ret = disk_inode->isdir;
+  free (disk_inode);
+  return ret;
+}
+
+void
+inode_entrycnt_inc (const struct inode *inode)
+{
+  struct inode_disk *disk_inode = get_disk_inode (inode);
+  ASSERT (disk_inode != NULL);
+  disk_inode->entry_cnt++;
+  cache_write_at (inode->sector, disk_inode, 0, BLOCK_SECTOR_SIZE);
+  free (disk_inode);
+}
+
+void
+inode_entrycnt_dec (const struct inode *inode)
+{
+  struct inode_disk *disk_inode = get_disk_inode (inode);
+  ASSERT (disk_inode != NULL);
+  disk_inode->entry_cnt--;
+  ASSERT (disk_inode->entry_cnt >= 0);
+  cache_write_at (inode->sector, disk_inode, 0, BLOCK_SECTOR_SIZE);
+  free (disk_inode);
+}
+
+bool
+inode_emptydir (const struct inode *inode)
+{
+  struct inode_disk *disk_inode = get_disk_inode (inode);
+  ASSERT (disk_inode != NULL);
+  bool ret = disk_inode->isdir && (disk_inode->entry_cnt == 0);
   free (disk_inode);
   return ret;
 }

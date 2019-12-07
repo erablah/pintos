@@ -5,6 +5,7 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 
 /* A directory. */
 struct dir
@@ -26,7 +27,21 @@ struct dir_entry
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  bool success = inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
+  if (success)
+  {
+    struct dir *dir = dir_open (inode_open (sector));
+    dir_add (dir, ".", sector);
+
+    if (sector != ROOT_DIR_SECTOR)
+    {
+      block_sector_t prev_sector = inode_get_inumber (thread_current ()->dir->inode);
+      dir_add (dir, "..", prev_sector);
+    }
+
+    dir_close (dir);
+  }
+  return success;
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -172,6 +187,10 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   e.in_use = true;
   strlcpy (e.name, name, sizeof e.name);
   e.inode_sector = inode_sector;
+  if (strcmp (name, ".") != 0 && strcmp (name, "..") != 0)
+    inode_entrycnt_inc (dir->inode);
+
+
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 
  done:
@@ -192,13 +211,20 @@ dir_remove (struct dir *dir, const char *name)
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
+  if (!strcmp (name, ".") || !strcmp (name, ".."))
+    goto done;
+
   /* Find directory entry. */
   if (!lookup (dir, name, &e, &ofs))
     goto done;
 
   /* Open inode. */
   inode = inode_open (e.inode_sector);
-  if (inode == NULL)
+
+  if (inode == NULL || inode_emptydir (inode))
+    goto done;
+
+  if (inode_isdir (inode) && inode_get_open_cnt (inode) > 1)
     goto done;
 
   /* Erase directory entry. */
@@ -212,6 +238,8 @@ dir_remove (struct dir *dir, const char *name)
 
  done:
   inode_close (inode);
+  if (success)
+    inode_entrycnt_dec (dir->inode);
   return success;
 }
 

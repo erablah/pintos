@@ -181,6 +181,27 @@ syscall_handler (struct intr_frame *f)
       break;
     }
 
+    case SYS_TELL:                   /* Report current position in a file. */
+    {
+      validate1 (f->esp);
+
+      int fd = *((int*)f->esp + 1);
+
+      f->eax = tell (fd);
+      break;
+    }
+
+    case SYS_CLOSE:                  /* Close a file. */
+    {
+      //printf ("close\n");
+      validate1 (f->esp);
+
+      int fd = *((int*)f->esp + 1);
+
+      close (fd);
+      break;
+    }
+
     case SYS_MMAP:
     {
       //printf ("mmap\n");
@@ -204,24 +225,60 @@ syscall_handler (struct intr_frame *f)
       break;
     }
 
-    case SYS_TELL:                   /* Report current position in a file. */
+    case SYS_CHDIR:
     {
       validate1 (f->esp);
 
-      int fd = *((int*)f->esp + 1);
+      const char *dir = (char*)*((int*)f->esp + 1);
 
-      f->eax = tell (fd);
+      validate (dir);
+
+      f->eax = chdir (dir);
       break;
     }
 
-    case SYS_CLOSE:                  /* Close a file. */
+    case SYS_MKDIR:
     {
-      //printf ("close\n");
+      validate1 (f->esp);
+
+      const char *dir = (char*)*((int*)f->esp + 1);
+
+      validate (dir);
+
+      f->eax = mkdir (dir);
+      break;
+    }
+
+    case SYS_READDIR:
+    {
+      validate2 (f->esp);
+
+      int fd = *((int*)f->esp + 1);
+      char *name = (char*)*((int*)f->esp + 2);
+
+      validate (name);
+
+      f->eax = readdir (fd, name);
+      break;
+    }
+
+    case SYS_ISDIR:
+    {
       validate1 (f->esp);
 
       int fd = *((int*)f->esp + 1);
 
-      close (fd);
+      f->eax = isdir (fd);
+      break;
+    }
+
+    case SYS_INUMBER:
+    {
+      validate1 (f->esp);
+
+      int fd = *((int*)f->esp + 1);
+
+      f->eax = inumber (fd);
       break;
     }
 

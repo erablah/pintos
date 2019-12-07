@@ -54,7 +54,7 @@ cache_init (void)
   }
   iter_idx = 0;
   thread_create ("read-ahead", PRI_DEFAULT, read_ahead, NULL);
-  thread_create ("write-back", PRI_DEFAULT, write_back, NULL);
+  // thread_create ("write-back", PRI_DEFAULT, write_back, NULL);
 }
 
 /* Find cache entry and return it. If not found, allocate a new entry and return it.
@@ -226,16 +226,17 @@ write_back (void *aux UNUSED)
 {
   while (1)
   {
-    thread_sleep (50);
+    thread_sleep (1000);
     for (int i = 0; i < 64; i++)
     {
+      lock_acquire (&cache[i].lock);
       if (cache[i].dirty && cache[i].valid)
       {
-        lock_acquire (&cache[i].lock);
+        printf ("sfd\n");
         block_write (fs_device, cache[i].sector, cache[i].buffer);
         cache[i].dirty = 0;
-        lock_release (&cache[i].lock);
       }
+      lock_release (&cache[i].lock);
     }
   }
 }

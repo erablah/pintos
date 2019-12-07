@@ -124,6 +124,8 @@ struct thread
     struct list mmap_list;
     int mapid;
 
+    struct dir *dir;
+
 #endif
 
     /* Owned by thread.c. */
