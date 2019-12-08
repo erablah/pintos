@@ -384,7 +384,7 @@ inode_emptydir (const struct inode *inode)
 {
   struct inode_disk *disk_inode = get_disk_inode (inode);
   ASSERT (disk_inode != NULL);
-  bool ret = disk_inode->isdir && (disk_inode->entry_cnt == 0);
+  bool ret = disk_inode->entry_cnt == 0;
   free (disk_inode);
   return ret;
 }

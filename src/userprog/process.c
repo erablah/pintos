@@ -314,7 +314,7 @@ load (const char *cmdline, void (**eip) (void), void **esp)
   /* Separate file_name and args for argument passing */
   file_name = strtok_r (cmdline, " ", &save_ptr);
 
-  file = filesys_open (file_name);
+  file = filesys_open (file_name, t->dir);
 
   if (file == NULL)
     {

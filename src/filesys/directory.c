@@ -7,13 +7,6 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 
-/* A directory. */
-struct dir
-  {
-    struct inode *inode;                /* Backing store. */
-    off_t pos;                          /* Current position. */
-  };
-
 /* A single directory entry. */
 struct dir_entry
   {
@@ -25,7 +18,7 @@ struct dir_entry
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
-dir_create (block_sector_t sector, size_t entry_cnt)
+dir_create (block_sector_t sector, size_t entry_cnt, struct dir *prevdir)
 {
   bool success = inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
   if (success)
@@ -35,8 +28,12 @@ dir_create (block_sector_t sector, size_t entry_cnt)
 
     if (sector != ROOT_DIR_SECTOR)
     {
-      block_sector_t prev_sector = inode_get_inumber (thread_current ()->dir->inode);
+      block_sector_t prev_sector = inode_get_inumber (prevdir->inode);
       dir_add (dir, "..", prev_sector);
+    }
+    else
+    {
+      dir_add (dir, "..", sector);
     }
 
     dir_close (dir);
@@ -187,9 +184,9 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   e.in_use = true;
   strlcpy (e.name, name, sizeof e.name);
   e.inode_sector = inode_sector;
+
   if (strcmp (name, ".") != 0 && strcmp (name, "..") != 0)
     inode_entrycnt_inc (dir->inode);
-
 
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
 
@@ -218,13 +215,16 @@ dir_remove (struct dir *dir, const char *name)
   if (!lookup (dir, name, &e, &ofs))
     goto done;
 
+  if (e.inode_sector == ROOT_DIR_SECTOR)
+    goto done;
+
   /* Open inode. */
   inode = inode_open (e.inode_sector);
 
-  if (inode == NULL || inode_emptydir (inode))
+  if (inode == NULL)
     goto done;
 
-  if (inode_isdir (inode) && inode_get_open_cnt (inode) > 1)
+  if (inode_isdir (inode) && (inode_get_open_cnt (inode) > 1 || !inode_emptydir (inode)) )
     goto done;
 
   /* Erase directory entry. */

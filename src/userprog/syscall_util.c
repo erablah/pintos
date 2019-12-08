@@ -10,6 +10,7 @@
 #include "filesys/filesys.h"
 #include "filesys/directory.h"
 #include "filesys/inode.h"
+#include "filesys/free-map.h"
 #include <console.h>
 #include <debug.h>
 #include "devices/input.h"
@@ -23,6 +24,7 @@
 
 struct file * fd_to_file (int fd);
 struct mmap_entry *mapid_to_mmap_entry (int mapping);
+static struct dir *checkdir (char *dir_copy, char **token);
 
 void halt (void)
 {
@@ -49,22 +51,106 @@ int wait (pid_t pid)
 
 bool create (const char *file, unsigned initial_size)
 {
-  return filesys_create (file, initial_size);
+  if (strlen (file) == 0)
+    return false;
+
+  size_t len = strlen (file);
+  char *file_copy = calloc (len + 1, sizeof (char));
+  char *filename;
+  struct inode *inode;
+  bool success = false;
+
+  strlcpy (file_copy, file, len + 1);
+
+  struct dir *checkeddir = checkdir (file_copy, &filename);
+
+  if (checkeddir == NULL || filename == NULL)
+    goto done;
+
+  if (dir_lookup (checkeddir, filename, &inode))
+  {
+    inode_close (inode);
+    goto done;
+  }
+
+  success = filesys_create (filename, initial_size, checkeddir);
+
+  done:
+    free (file_copy);
+    dir_close (checkeddir);
+    return success;
 }
 
 bool remove (const char *file)
 {
-  return filesys_remove (file);
+  if (strlen (file) == 0)
+    return false;
+
+  size_t len = strlen (file);
+  char *file_copy = calloc (len + 1, sizeof (char));
+  char *filename;
+  struct inode *inode;
+  bool success = false;
+
+  strlcpy (file_copy, file, len + 1);
+
+  struct dir *checkeddir = checkdir (file_copy, &filename);
+
+  if (checkeddir == NULL || filename == NULL)
+    goto done;
+
+  if (!dir_lookup (checkeddir, filename, &inode))
+    goto done;
+
+  inode_close (inode);
+
+  success = filesys_remove (filename, checkeddir);
+
+  done:
+    free (file_copy);
+    dir_close (checkeddir);
+    return success;
 }
 
 int open (const char *file)
 {
-  struct file *file_ptr = filesys_open (file);
+  if (strlen (file) == 0)
+    return -1;
+
+  size_t len = strlen (file);
+  char *file_copy = calloc (len + 1, sizeof (char));
+  char *filename;
+  struct inode *inode;
+  bool success = false;
+
+  strlcpy (file_copy, file, len + 1);
+
+  struct dir *checkeddir = checkdir (file_copy, &filename);
+
+  if (checkeddir == NULL)
+    goto done;
+
+  if (filename == NULL && inode_get_inumber (dir_get_inode (checkeddir)) == ROOT_DIR_SECTOR)
+    filename = ".";
+
+  if (!dir_lookup (checkeddir, filename, &inode))
+    goto done;
+
+  inode_close (inode);
+
+  struct file *file_ptr = filesys_open (filename, checkeddir);
 
   if (file_ptr == NULL)
     return -1;
 
-  return file_ptr->fd;
+  success = true;
+
+  done:
+    free (file_copy);
+    dir_close (checkeddir);
+    if (!success)
+      return -1;
+    return file_ptr->fd;
 }
 
 // what if invalid fd? assertion in file_length () will be called
@@ -321,29 +407,27 @@ void munmap (int mapping)
   free (mmap_entry);
 }
 
-bool
-chdir (const char *dir)
+/* Changes directories until just before the last specified directory/file.
+    Returns the changed directory on success, NULL on failure */
+static struct dir *
+checkdir (char *dir_copy, char **token)
 {
   struct dir *temp_dir = NULL;
-  size_t len = strlen (dir);
-  char *dir_copy = calloc (len, sizeof (char));
   bool success = false;
   struct thread *t = thread_current ();
-
-  strlcpy (dir_copy, dir, len);
 
   if (*dir_copy == '/')
     temp_dir = dir_open_root ();
   else
     temp_dir = dir_reopen (t->dir);
 
-  char *token, *save_ptr;
+  char *save_ptr;
   struct inode *inode = NULL;
 
-  for (token = strtok_r (dir_copy, "/", &save_ptr); token != NULL;
-        token = strtok_r (NULL, "/", &save_ptr))
+  for (*token = strtok_r (dir_copy, "/", &save_ptr); *save_ptr != '\0';
+        *token = strtok_r (NULL, "/", &save_ptr))
   {
-    if (!dir_lookup (temp_dir, token, &inode))
+    if (!dir_lookup (temp_dir, *token, &inode))
       goto done;
 
     if (!inode_isdir (inode))
@@ -357,28 +441,110 @@ chdir (const char *dir)
     temp_dir = dir_open (inode);
   }
 
-  t->dir = temp_dir;
+  success = true;
+
+  done:
+    if (!success)
+    {
+      dir_close (temp_dir);
+      return NULL;
+    }
+    else
+      return temp_dir;
+}
+
+bool
+chdir (const char *dir)
+{
+  size_t len = strlen (dir);
+  char *dir_copy = calloc (len + 1, sizeof (char));
+  struct thread *t = thread_current ();
+
+  char *dirname;
+  struct inode *inode;
+  bool success = false;
+
+  strlcpy (dir_copy, dir, len + 1);
+
+  struct dir *checkeddir = checkdir (dir_copy, &dirname);
+
+  if (checkeddir == NULL)
+    goto done;
+
+  if (dirname == NULL && inode_get_inumber (dir_get_inode (checkeddir)) == ROOT_DIR_SECTOR)
+    dirname = ".";
+
+  if (!dir_lookup (checkeddir, dirname, &inode))
+    goto done;
+
+  if (!inode_isdir (inode))
+  {
+    inode_close (inode);
+    goto done;
+  }
+
+  dir_close (t->dir);
+  t->dir = dir_open (inode);
+
   success = true;
 
   done:
     free (dir_copy);
-
-    if (!success)
-      dir_close (temp_dir);
-
+    dir_close (checkeddir);
     return success;
 }
 
 bool
 mkdir (const char *dir)
 {
-  return 1;
+  if (strlen (dir) == 0)
+    return false;
+
+  size_t len = strlen (dir);
+  char *dir_copy = calloc (len + 1, sizeof (char));
+  char *dirname;
+  struct inode *inode;
+  block_sector_t inode_sector = 0;
+  bool success = false;
+
+  strlcpy (dir_copy, dir, len + 1);
+
+  struct dir *checkeddir = checkdir (dir_copy, &dirname);
+
+  if (checkeddir == NULL || dirname == NULL)
+    goto done;
+
+
+  if (dir_lookup (checkeddir, dirname, &inode))
+  {
+    inode_close (inode);
+    goto done;
+  }
+
+  success = (free_map_allocate (1, &inode_sector)
+              && dir_create (inode_sector, 16, checkeddir)
+              && dir_add (checkeddir, dirname, inode_sector));
+
+  done:
+    if (!success && inode_sector != 0)
+      free_map_release (inode_sector, 1);
+    free (dir_copy);
+    dir_close (checkeddir);
+    return success;
 }
 
 bool
 readdir (int fd, char *name)
 {
-  return 1;
+  if (!isdir (fd))
+    return false;
+
+  struct inode *inode = file_get_inode (fd_to_file (fd));
+  struct dir *dir = dir_open (inode);
+
+  bool success = dir_readdir (dir, name);
+  dir_close (dir);
+  return success;
 }
 
 bool
