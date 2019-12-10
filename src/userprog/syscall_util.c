@@ -521,13 +521,13 @@ mkdir (const char *dir)
     goto done;
   }
 
-  success = (free_map_allocate (1, &inode_sector)
+  success = (free_map_allocate (&inode_sector)
               && dir_create (inode_sector, 16, checkeddir)
               && dir_add (checkeddir, dirname, inode_sector));
 
   done:
     if (!success && inode_sector != 0)
-      free_map_release (inode_sector, 1);
+      free_map_release (inode_sector);
     free (dir_copy);
     dir_close (checkeddir);
     return success;
