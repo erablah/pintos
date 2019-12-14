@@ -167,27 +167,47 @@ cache_read_at (block_sector_t sector, void *buffer, int ofs, int size)
 
 
   // Read ahead
-  int next = cache_allocate (sector + 1);
-
-  if (!cache[next].loaded)
+  if (sector + 1 < block_size (fs_device))
   {
-    lock_acquire (&cache_lock);
-    //put into queue
-    struct queue_entry *new = malloc (sizeof (struct queue_entry));
-    new->index = next;
+    int next = cache_allocate (sector + 1);
 
-    if (list_empty (&read_queue))
+    if (!cache[next].loaded)
     {
-      list_push_back (&read_queue, &new->elem);
-      sema_up (&read_sema);
-    }
-    else
-      list_push_back (&read_queue, &new->elem);
-    lock_release (&cache_lock);
-  }
+      lock_acquire (&cache_lock);
+      //put into queue
+      struct queue_entry *new = malloc (sizeof (struct queue_entry));
+      new->index = next;
 
-  lock_release (&cache[next].lock);
+      if (list_empty (&read_queue))
+      {
+        list_push_back (&read_queue, &new->elem);
+        sema_up (&read_sema);
+      }
+      else
+        list_push_back (&read_queue, &new->elem);
+      lock_release (&cache_lock);
+    }
+
+    lock_release (&cache[next].lock);
+  }
 }
+
+void
+cache_done (void)
+{
+  lock_acquire(&cache_lock);
+  for (int i = 0; i < 64; i++)
+  {
+    if (cache[i].dirty && cache[i].loaded)
+    {
+      block_write(fs_device, cache[i].sector, cache[i].buffer);
+      cache[i].dirty = false;
+    }
+  }
+  lock_release(&cache_lock);
+
+}
+
 
 
 void
@@ -232,7 +252,6 @@ write_back (void *aux UNUSED)
       lock_acquire (&cache[i].lock);
       if (cache[i].dirty && cache[i].valid)
       {
-        printf ("sfd\n");
         block_write (fs_device, cache[i].sector, cache[i].buffer);
         cache[i].dirty = 0;
       }

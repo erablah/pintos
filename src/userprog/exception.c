@@ -250,6 +250,7 @@ page_fault (struct intr_frame *f)
 struct frame_table_entry *
 page_fault_handler (struct intr_frame *f, void *fault_addr)
 {
+  //printf ("fault_addr: %p\n", fault_addr);
   bool writable;
   bool success = false;
   struct SPT_entry *SPT_entry_ptr;

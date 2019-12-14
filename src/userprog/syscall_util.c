@@ -522,7 +522,7 @@ mkdir (const char *dir)
   }
 
   success = (free_map_allocate (&inode_sector)
-              && dir_create (inode_sector, 16, checkeddir)
+              && dir_create (inode_sector, 0, checkeddir)
               && dir_add (checkeddir, dirname, inode_sector));
 
   done:
@@ -539,12 +539,26 @@ readdir (int fd, char *name)
   if (!isdir (fd))
     return false;
 
-  struct inode *inode = file_get_inode (fd_to_file (fd));
-  struct dir *dir = dir_open (inode);
+  struct file *file = fd_to_file (fd);
 
-  bool success = dir_readdir (dir, name);
-  dir_close (dir);
-  return success;
+  struct inode *inode = file_get_inode (file);
+
+
+  if (inode_emptydir (inode))
+    return false;
+
+  struct dir_entry e;
+
+  while (file_read (file, &e, sizeof e) == sizeof e)
+    {
+      if (e.in_use && strcmp (e.name, ".") == 1 && strcmp (e.name, "..") == 1)
+        {
+          strlcpy (name, e.name, NAME_MAX + 1);
+          return true;
+        }
+    }
+
+  return false;
 }
 
 bool

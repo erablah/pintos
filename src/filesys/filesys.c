@@ -40,6 +40,7 @@ filesys_init (bool format)
 void
 filesys_done (void)
 {
+  cache_done ();
   free_map_close ();
 }
 
@@ -51,7 +52,7 @@ bool
 filesys_create (const char *name, off_t initial_size, struct dir *dir)
 {
   block_sector_t inode_sector = 0;
-  
+
   bool success = (dir != NULL
                   && free_map_allocate (&inode_sector)
                   && inode_create (inode_sector, initial_size, false)
@@ -99,7 +100,7 @@ do_format (void)
 {
   printf ("Formatting file system...");
   free_map_create ();
-  if (!dir_create (ROOT_DIR_SECTOR, 16, NULL))
+  if (!dir_create (ROOT_DIR_SECTOR, 0, NULL))
     PANIC ("root directory creation failed");
   free_map_close ();
   printf ("done.\n");
