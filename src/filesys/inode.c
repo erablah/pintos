@@ -169,30 +169,6 @@ inode_block_to_sector (struct inode_disk *disk_inode, size_t block_idx, struct i
   ASSERT (0);
 }
 
-/* Returns the block device sector that contains byte offset POS
-   within INODE.
-   Returns -1 if INODE does not contain data for a byte at offset
-   POS. */
-// static block_sector_t
-// inode_byte_to_sector (const struct inode *inode, off_t pos)
-// {
-//   ASSERT (inode != NULL);
-//
-//   struct inode_disk *disk_inode = get_disk_inode (inode);
-//
-//   if (disk_inode != NULL)
-//   {
-//     if (pos < disk_inode->length)
-//     {
-//       block_sector_t sector = pos / BLOCK_SECTOR_SIZE;
-//       free (disk_inode);
-//       return ret;
-//     }
-//     else return -1;
-//   }
-//   return -1;
-// }
-
 /* List of open inodes, so that opening a single inode twice
    returns the same `struct inode'. */
 static struct list open_inodes;
@@ -225,6 +201,7 @@ inode_create (block_sector_t sector, off_t length, bool isdir)
   if (disk_inode != NULL)
     {
       size_t sectors = bytes_to_sectors (length);
+      //printf ("\nlength %d, sectors %d\n", length, sectors);
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
       disk_inode->isdir = isdir;
@@ -244,9 +221,13 @@ inode_create (block_sector_t sector, off_t length, bool isdir)
           memset (indirect_block, 0, sizeof (struct indirect_block));
         if (i >= NUM_DIRECT + 128)
           memset (double_indirect_block, 0, sizeof (struct indirect_block));
-        // if (inode_block_to_sector (disk_inode, i, indirect_block, double_indirect_block, true) == 0)
-        //   goto done;
-        inode_block_to_sector (disk_inode, i, indirect_block, double_indirect_block, true);
+        if (inode_block_to_sector (disk_inode, i, indirect_block, double_indirect_block, true) == 0)
+          goto done;
+        // struct inode_disk *empty = calloc (1, sizeof (disk_inode));
+        // cache_write_at (sector_, empty, 0, BLOCK_SECTOR_SIZE);
+        // free (empty);
+        //printf ("allocated sector %d\n", sector_);
+
       }
 
       cache_write_at (sector, disk_inode, 0, BLOCK_SECTOR_SIZE);
@@ -258,6 +239,7 @@ inode_create (block_sector_t sector, off_t length, bool isdir)
     }
 
   done:
+    //printf ("create done\n");
     free (disk_inode);
     return success;
 }
@@ -272,6 +254,7 @@ inode_open (block_sector_t sector)
   struct inode *inode;
 
   /* Check whether this inode is already open. */
+  //lock_acquire ()
   for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
        e = list_next (e))
     {
@@ -363,8 +346,8 @@ inode_close (struct inode *inode)
               memset (double_indirect_block, 0, sizeof (struct indirect_block));
             block_sector_t sector = inode_block_to_sector (disk_inode, i, indirect_block,
                         double_indirect_block, false);
-            //if (sector != 0)
-            free_map_release (sector);
+            if (sector != 0)
+              free_map_release (sector);
           }
 
           free (indirect_block);
@@ -398,13 +381,13 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   struct indirect_block *indirect_block = NULL;
   struct indirect_block *double_indirect_block = NULL;
 
-  size_t sectors = bytes_to_sectors (size + offset + 1);
+  size_t sectors = bytes_to_sectors (size + offset);
 
-  //if (sectors > NUM_DIRECT)
-  indirect_block = calloc (1, sizeof (struct indirect_block));
+  if (sectors > NUM_DIRECT)
+    indirect_block = calloc (1, sizeof (struct indirect_block));
 
-  //if (sectors > NUM_DIRECT + 128)
-  double_indirect_block = calloc (1, sizeof (struct indirect_block));
+  if (sectors > NUM_DIRECT + 128)
+    double_indirect_block = calloc (1, sizeof (struct indirect_block));
 
   struct inode_disk *disk_inode = get_disk_inode (inode);
 
@@ -420,6 +403,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
       block_sector_t sector_idx = inode_block_to_sector (disk_inode, block_idx,
                 indirect_block, double_indirect_block, false);
+
+      //printf ("reading from sector_idx: %d, offset: %d, size %d\n", sector_idx, offset, size);
 
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
@@ -477,13 +462,13 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   struct indirect_block *indirect_block = NULL;
   struct indirect_block *double_indirect_block = NULL;
 
-  size_t sectors = bytes_to_sectors (size + offset + 1);
+  size_t sectors = bytes_to_sectors (size + offset);
 
-  //if (sectors > NUM_DIRECT)
-  indirect_block = calloc (1, sizeof (struct indirect_block));
+  if (sectors > NUM_DIRECT)
+    indirect_block = calloc (1, sizeof (struct indirect_block));
 
-  //if (sectors > NUM_DIRECT + 128)
-  double_indirect_block = calloc (1, sizeof (struct indirect_block));
+  if (sectors > NUM_DIRECT + 128)
+    double_indirect_block = calloc (1, sizeof (struct indirect_block));
 
   struct inode_disk *disk_inode = get_disk_inode (inode);
 
@@ -491,21 +476,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     {
       /* Disk sector to read, starting byte offset within sector. */
       int block_idx = offset/BLOCK_SECTOR_SIZE;
-
-      //printf ("block_idx: %d\n", block_idx);
-
-      if (block_idx >= NUM_DIRECT)
-        memset (indirect_block, 0, sizeof (struct indirect_block));
-      if (block_idx >= NUM_DIRECT + 128)
-        memset (double_indirect_block, 0, sizeof (struct indirect_block));
-
-      block_sector_t sector_idx = inode_block_to_sector (disk_inode, block_idx,
-                indirect_block, double_indirect_block, true);
-
-      if (sector_idx == 0)
-        goto done;
-
-      //printf ("sector_idx: %d\n", sector_idx);
 
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
@@ -520,22 +490,52 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       if (chunk_size <= 0)
         break;
 
-      //printf ("writing at block %d, sector %d, offset %d\n", block_idx, sector_idx, sector_ofs);
+      if (block_idx >= NUM_DIRECT)
+        memset (indirect_block, 0, sizeof (struct indirect_block));
+      if (block_idx >= NUM_DIRECT + 128)
+        memset (double_indirect_block, 0, sizeof (struct indirect_block));
 
-      cache_write_at (sector_idx, buffer + bytes_written, sector_ofs, chunk_size);
+      //printf ("offset = %d, chunk_size = %d, disk_inode->length: %d\n", offset, chunk_size, disk_inode->length);
+
+      if (offset + chunk_size > disk_inode->length)
+      {
+        //lock_acquire (&inode->extension_lock);
+        if (offset + chunk_size > disk_inode->length)
+        {
+          block_sector_t sector_idx = inode_block_to_sector (disk_inode, block_idx,
+                    indirect_block, double_indirect_block, true);
+
+          if (sector_idx == 0)
+            goto done;
+
+          disk_inode->length = offset + chunk_size;
+          //lock_release (&inode->extension_lock);
+          cache_write_at (inode->sector, disk_inode, 0, BLOCK_SECTOR_SIZE);
+
+          //printf ("(extension) writing to sector_idx: %d, offset: %d, size %d\n", sector_idx, offset, size);
+          cache_write_at (sector_idx, buffer + bytes_written, sector_ofs, chunk_size);
+        }
+        else
+        {
+          //lock_release (&inode->extension_lock);
+        }
+      }
+      else
+      {
+        block_sector_t sector_idx = inode_block_to_sector (disk_inode, block_idx,
+                  indirect_block, double_indirect_block, true);
+
+        if (sector_idx == 0)
+          goto done;
+
+        //printf ("(non-extension) writing to sector_idx: %d, offset: %d, size %d\n", sector_idx, offset, size);
+        cache_write_at (sector_idx, buffer + bytes_written, sector_ofs, chunk_size);
+      }
 
       /* Advance. */
       size -= chunk_size;
       offset += chunk_size;
       bytes_written += chunk_size;
-
-      lock_acquire (&inode->extension_lock);
-      if (offset >= disk_inode->length)
-      {
-        disk_inode->length = offset;
-        cache_write_at (inode->sector, disk_inode, 0, BLOCK_SECTOR_SIZE);
-      }
-      lock_release (&inode->extension_lock);
     }
 
   done:
